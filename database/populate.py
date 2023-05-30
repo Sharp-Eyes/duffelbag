@@ -290,5 +290,3 @@ async def populate_characters(
                     #     ),
                     #     values=[database.SkillSharedUpgradeItem.quantity]
                     # )
-
-

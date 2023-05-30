@@ -38,7 +38,9 @@ class RawSkillLevel(pydantic.BaseModel):
         # [{"id": "a", value: 1}, {"id": "b", value: 2}]
         # to
         # {"a": 1, "b": 2}
-        blackboard_map: dict[str, object] = dict(map(dict.values, blackboard))  # pyright: ignore  # noqa: PGH003, E501
+        blackboard_map: dict[str, object] = dict(
+            map(dict.values, blackboard)  # pyright: ignore  # noqa: PGH003
+        )
 
         # Replace colour tags by something we can actually use.
         # Sadly discord doesn't support coloured text, so we settle for bold.

@@ -26,7 +26,7 @@ repos:
         args: [--markdown-linebreak-ext=md]
 
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: v0.0.260
+    rev: v0.0.270
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -37,14 +37,12 @@ repos:
     hooks:
       - id: black
         name: Running black in all files.
+        exclude: database/piccolo_migrations
 
-  - repo: local
+  - repo: https://github.com/ariebovenberg/slotscheck
+    rev: v0.16.4
     hooks:
       - id: slotscheck
         name: Running slotscheck in all files.
-        language: python
-        entry: python -m scripts.slotscheck
-        types: [python]
-        additional_dependencies:
-        - slotscheck >= 0.16.5
-        - disnake >= 2.5.0
+        exclude: "piccolo_conf.py"
+        additional_dependencies: [piccolo, pydantic, aiohttp, python-dotenv]

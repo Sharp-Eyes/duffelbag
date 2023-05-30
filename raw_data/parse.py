@@ -16,6 +16,7 @@ _all__: typing.Sequence[str] = (
 )
 
 
+# fmt: off
 _CHARACTER_DATA_URL: typing.Final[str] = (
     "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata/excel/character_table.json"
 )
@@ -28,10 +29,11 @@ _ITEM_DATA_URL: typing.Final[str] = (
 _TAG_DATA_URL: typing.Final[str] = (
     "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata/excel/gacha_table.json"
 )
+# fmt: on
 
 
 async def fetch_characters(
-    session: aiohttp.ClientSession | None = None
+    session: aiohttp.ClientSession | None = None,
 ) -> typing.Sequence[models.RawCharacter]:
     """Download and parse character gamedata.
 
@@ -61,7 +63,7 @@ async def fetch_characters(
 
 
 async def fetch_skills(
-    session: aiohttp.ClientSession | None = None
+    session: aiohttp.ClientSession | None = None,
 ) -> typing.Sequence[models.RawSkill]:
     """Download and parse skill gamedata.
 
@@ -87,12 +89,11 @@ async def fetch_skills(
         models.RawSkill(**skill)
         for id, skill in data.items()
         if id.startswith(("skchr", "skcom"))
-    ]
-
+    ]  # fmt: skip
 
 
 async def fetch_items(
-    session: aiohttp.ClientSession | None = None
+    session: aiohttp.ClientSession | None = None,
 ) -> typing.Sequence[models.RawItem]:
     """Download and parse item gamedata.
 
@@ -120,12 +121,12 @@ async def fetch_items(
         if (
             item["classifyType"] == "MATERIAL" and item["itemType"] == "MATERIAL"
             or item["classifyType"] == "NORMAL" and item["itemType"] == "GOLD"
-        )
+        )  # fmt: skip
     ]
 
 
 async def fetch_tags(
-    session: aiohttp.ClientSession | None = None
+    session: aiohttp.ClientSession | None = None,
 ) -> typing.Sequence[models.RawTag]:
     """Download and parse character tag gamedata.
 
@@ -150,7 +151,9 @@ async def fetch_tags(
     return [models.RawTag(**tag) for tag in data["gachaTags"]]
 
 
-async def fetch_all(session: aiohttp.ClientSession | None = None) -> tuple[
+async def fetch_all(
+    session: aiohttp.ClientSession | None = None,
+) -> tuple[
     typing.Sequence[models.RawCharacter],
     typing.Sequence[models.RawSkill],
     typing.Sequence[models.RawItem],

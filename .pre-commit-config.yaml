@@ -45,4 +45,11 @@ repos:
       - id: slotscheck
         name: Running slotscheck in all files.
         exclude: "piccolo_conf.py"
-        additional_dependencies: [piccolo, pydantic, aiohttp, python-dotenv]
+        additional_dependencies: [
+          piccolo,
+          pydantic,
+          aiohttp,
+          python-dotenv,
+          arkprts,
+          asyncpg,
+        ]

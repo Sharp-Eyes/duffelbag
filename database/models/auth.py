@@ -12,8 +12,8 @@ class DuffelbagUser(table.Table):
     """
 
     id: columns.Serial
-
-    # TODO: User settings.
+    username = columns.Varchar(32, unique=True)
+    password = columns.Varchar(32)
 
 
 class PlatformUser(table.Table):
@@ -30,10 +30,17 @@ class PlatformUser(table.Table):
     # TODO: Perhaps a composite unique constraint on (platform_id, platform_name)
 
 
-class Auth(table.Table):
+class ArknightsUser(table.Table):
     """The database representation of a user's Arknights authentication data."""
 
     id: columns.Serial
     user = columns.ForeignKey(references=DuffelbagUser)
     channel_uid = columns.Varchar(16)
     yostar_token = columns.Varchar(32)
+
+    # NOTE: Email only serves to pre-warn when a user tries to register with an
+    #       account that is already registered. Since it's privacy-sensitive
+    #       information, we'll keep it nullable and opt-in.
+    email = columns.Email(null=True)
+
+    # TODO: Perhaps a composite unique constraint on (user, channel_uid, yostar_token)

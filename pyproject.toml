@@ -12,7 +12,7 @@ uvloop = "^0.17.0"
 python-dotenv = "^0.21.0"
 disnake = "^2.8.1"
 arkprts = {git = "https://github.com/thesadru/arkprts"}
-piccolo = {extras = ["postgres"], version = "^0.112.1"}
+piccolo = {extras = ["postgres"], version = "^0.113.0"}
 
 
 [tool.poetry.group.dev.dependencies]
@@ -35,6 +35,7 @@ exclude = [
     "database/piccolo_migrations",
     ".venv",
 ]
+reportMissingTypeStubs=false
 
 
 [tool.black]
@@ -89,7 +90,6 @@ select = [
 # D203 and D211, D212 and D213 intentionally clash
 # ANN101, ANN102 ask for `self` and `cls` annotations, what?
 # RET505-RET508 does not allow for any branches where it is an elif and else after a return
-# PLR2004 too much to deal with right now.
 # PLC0414 doesn't support `import foo as foo` to reexport.
 ignore = [
     "F403",
@@ -104,7 +104,6 @@ ignore = [
     "RET506",
     "RET507",
     "RET508",
-    # "PLR2004",
     "PLC0414",
 ]
 

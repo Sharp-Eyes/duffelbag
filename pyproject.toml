@@ -5,30 +5,42 @@ description = ""
 authors = ["Chromosomologist <chromosomologist@gmail.com>"]
 readme = "README.md"
 
+
 [tool.poetry.dependencies]
-python = "3.10.8"
+python = "^3.10"
 uvloop = "^0.17.0"
 python-dotenv = "^0.21.0"
-allium = {git = "https://github.com/chromosomologist/allium"}
 disnake = "^2.8.1"
 arkprts = {git = "https://github.com/thesadru/arkprts"}
 piccolo = {extras = ["postgres"], version = "^0.112.1"}
 
 
 [tool.poetry.group.dev.dependencies]
-ipykernel = "^6.20.1"
 devtools = "^0.11.0"
 ruff = "^0.0.270"
+pre-commit = "^3.3.2"
+pyright = "^1.1.310"
+
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 
+[tool.pyright]
+exclude = [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.*",
+    "database/piccolo_migrations",
+    ".venv",
+]
+
+
 [tool.ruff]
 line-length=100
 extend-exclude = [
-    "database/piccolo_migrations"
+    "database/piccolo_migrations",
 ]
 
 select = [

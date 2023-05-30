@@ -1,0 +1,14 @@
+__pycache__
+.vscode
+.mypy_cache
+*.egg-info/
+*env*/
+poetry.lock
+.env
+
+test.py
+*.ipynb
+
+tests/_*.py
+coverage.*
+.coverage

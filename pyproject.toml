@@ -1,0 +1,94 @@
+[tool.poetry]
+name = "duffelbag"
+version = "0.1.0"
+description = ""
+authors = ["Chromosomologist <chromosomologist@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "3.10.8"
+uvloop = "^0.17.0"
+python-dotenv = "^0.21.0"
+allium = {git = "https://github.com/chromosomologist/allium"}
+disnake = "^2.8.1"
+arkprts = {git = "https://github.com/thesadru/arkprts"}
+piccolo = {extras = ["postgres"], version = "^0.112.1"}
+
+
+[tool.poetry.group.dev.dependencies]
+ipykernel = "^6.20.1"
+devtools = "^0.11.0"
+ruff = "^0.0.270"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+
+[tool.ruff]
+line-length=100
+extend-exclude = [
+    "database/piccolo_migrations"
+]
+
+select = [
+    "E",
+    "F",
+    "W",
+    "I",
+    "D",
+    "UP",
+    "YTT",
+    "ANN",
+    "S",
+    "BLE",
+    "FBT",
+    "B",
+    "C40",
+    "DTZ",
+    "T10",
+    "EM",
+    "ISC",
+    "G",
+    "PIE",
+    "T20",
+    "Q",
+    "RSE",
+    "RET",
+    "SIM",
+    "TCH",
+    "ARG",
+    "PGH",
+    "PLC",
+    "PLE",
+    "PLR",
+    "PLW",
+    "TRY",
+    "RUF",
+]
+# F403, F405 do not need to hate wildcard imports. Pyright can find undefined errors.
+# D105, not really any point in documenting magic methods.
+# D107, class docstr is in the class level, may change in future.
+# D203 and D211, D212 and D213 intentionally clash
+# ANN101, ANN102 ask for `self` and `cls` annotations, what?
+# RET505-RET508 does not allow for any branches where it is an elif and else after a return
+# PLR2004 too much to deal with right now.
+# PLC0414 doesn't support `import foo as foo` to reexport.
+ignore = [
+    "F403",
+    "F405",
+    "D105",
+    "D107",
+    "D203",
+    "D213",
+    "ANN101",
+    "ANN102",
+    "RET505",
+    "RET506",
+    "RET507",
+    "RET508",
+    # "PLR2004",
+    "PLC0414",
+]
+
+unfixable = ["RET502", "RET503"]

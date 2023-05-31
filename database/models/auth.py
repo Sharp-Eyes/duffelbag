@@ -27,7 +27,9 @@ class PlatformUser(table.Table):
     platform_id = columns.BigInt(null=True, unique=True, index=True)
     platform_name = columns.Varchar(16)
 
-    # TODO: Perhaps a composite unique constraint on (platform_id, platform_name)
+    # NOTE: As of migration 2023-05-31T10:47:00:954167, there is a composite
+    #       unique constraint on (platform_id, platform_name) with name
+    #       "platform_user_platform_id_platform_name_key".
 
 
 class ArknightsUser(table.Table):
@@ -43,4 +45,6 @@ class ArknightsUser(table.Table):
     #       information, we'll keep it nullable and opt-in.
     email = columns.Email(null=True)
 
-    # TODO: Perhaps a composite unique constraint on (user, channel_uid, yostar_token)
+    # NOTE: As of migration 2023-05-31T10:47:00:954167, there is a composite
+    #       unique constraint on (channel_uid, yostar_token) with name
+    #       "arknights_user_channel_uid_yostar_token_key".

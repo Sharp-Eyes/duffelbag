@@ -31,6 +31,7 @@ class _YostarAuthenticator:
 
     async def login_with_email(self, email: str, /) -> None:
         if self.email:
+            # TODO: Custom exception type
             msg = "An email has already been sent."
             raise RuntimeError(msg)
 
@@ -40,6 +41,7 @@ class _YostarAuthenticator:
 
     async def complete_login(self, verification_code: str) -> tuple[str, str]:
         if not self.email:
+            # TODO: Custom exception type
             msg = "A verification email must be sent first."
             raise RuntimeError(msg)
 
@@ -103,6 +105,7 @@ async def create_user(
             )
         )
     except asyncpg.UniqueViolationError as exc:
+        # TODO: Custom exception type
         msg = f"A user named {username!r} already exists. Please try another username."
         raise RuntimeError(msg) from exc
 
@@ -182,7 +185,9 @@ async def delete_user(*, username: str, password: str) -> None:
     raise RuntimeError(msg)
 
 
-async def recover_user(*, platform: Platform, platform_id: int) -> database.DuffelbagUser:
+async def recover_users(
+    *, platform: Platform, platform_id: int
+) -> typing.Sequence[database.DuffelbagUser]:
     """Recover an existing Duffelbag account through a connected external platform account.
 
     Parameters
@@ -209,12 +214,12 @@ async def recover_user(*, platform: Platform, platform_id: int) -> database.Duff
     result = await (
         database.DuffelbagUser.objects()
         .where((joined.platform_id == platform_id) & (joined.platform_name == platform.name))
-        .first()
-    )
+    )  # fmt: skip
 
     if result:
         return result
 
+    # TODO: Custom exception type
     msg = (
         f"External platform account with id '{platform_id}' on platform"
         f" {platform.name!r} is not bound to any Duffelbag account."
@@ -261,6 +266,7 @@ async def add_platform_account(
         )
 
     except asyncpg.UniqueViolationError as exc:
+        # TODO: Custom exception type
         msg = (
             f"External platform account with id '{platform_id}' on platform"
             f" {platform.name!r} is already registered to a Duffelbag account."
@@ -367,23 +373,25 @@ async def start_authentication(
     Raises
     ------
     :class:`RuntimeError`:
-        The email address is already registered to the provided Duffelbag
-        account. This prevents the verification mail from being sent
-        unnecessarily. Note that this can only occur if the user opted to store
-        their email address.
+        The email address is already registered to a Duffelbag account. This
+        prevents the verification mail from being sent unnecessarily. Note that
+        this can only occur if the user opted to store their email address.
     """
     exists = await (
         database.ArknightsUser.exists()  # pyright: ignore[reportUnknownMemberType]
-        .where(
-            (database.ArknightsUser.user == duffelbag_user.id)
-            & (database.ArknightsUser.email == email)
-        )  # fmt: skip
-    )
+        .where(database.ArknightsUser.email == email)
+    )  # fmt: skip
     if exists:
+        # TODO: Custom exception type
         msg = (
             f"The arknights account with email {email!r} is already registered"
-            f" to Duffelbag user {duffelbag_user.username!r}."
+            " to a Duffelbag user."
         )
+        raise RuntimeError(msg)
+
+    if duffelbag_user.id in _active_authenticators:
+        # TODO: Custom exception type
+        msg = f"Duffelbag user {duffelbag_user.username!r} is already undergoing authentication."
         raise RuntimeError(msg)
 
     authenticator = _YostarAuthenticator()
@@ -429,9 +437,10 @@ async def complete_authentication(
         timeout_task.cancel()
 
     if not authenticator:
+        # TODO: Custom exception type
         msg = (
-            f"Duffelbag user with id {duffelbag_user.username!r} is not in an"
-            " active authentication process."
+            f"The Duffelbag user with id {duffelbag_user.username!r} is not in"
+            " an active authentication process."
         )
         raise RuntimeError(msg)
 
@@ -478,14 +487,21 @@ async def add_arknights_account(
         The external account is already registered to a different Duffelbag
         account.
     """
-    await database.ArknightsUser.insert(
-        new_user := database.ArknightsUser(
-            user=duffelbag_user.id,
-            channel_uid=uid,
-            yostar_token=token,
-            email=email,
+    try:
+        await database.ArknightsUser.insert(
+            new_user := database.ArknightsUser(
+                user=duffelbag_user.id,
+                channel_uid=uid,
+                yostar_token=token,
+                email=email,
+            )
         )
-    )
+
+    except asyncpg.UniqueViolationError as exc:
+        # TODO: Custom exception type
+        msg = "This Arknights user is already registered to a different Duffelbag account."
+        raise RuntimeError(msg) from exc
+
     return new_user
 
 

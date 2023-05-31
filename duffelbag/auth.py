@@ -6,10 +6,14 @@ import asyncio
 import enum
 import typing
 
+import argon2
 import arkprts
 import asyncpg
 
 import database
+
+# Ensure passwords are hashed at the correct length. Should be 32 chars.
+_HASHER = argon2.PasswordHasher(hash_len=32)
 
 
 class Platform(enum.Enum):
@@ -74,7 +78,8 @@ async def create_user(
 ) -> database.DuffelbagUser:
     """Create a new Duffelbag account in the context of an external platform.
 
-    This also creates the corresponding external platform account.
+    This also creates the corresponding external platform account. Passwords
+    are saved as argon2 hashes.
 
     Parameters
     ----------
@@ -97,11 +102,13 @@ async def create_user(
     :class:`RuntimeError`
         A Duffelbag user with the provided name already exists.
     """
+    hashed = _HASHER.hash(password)
+
     try:
         await database.DuffelbagUser.insert(
             new_user := database.DuffelbagUser(
                 username=username,
-                password=password,
+                password=hashed,
             )
         )
     except asyncpg.UniqueViolationError as exc:
@@ -135,21 +142,29 @@ async def login_user(*, username: str, password: str) -> database.DuffelbagUser:
         The user could not be found; either the username does not exist or the
         password was incorrect.
     """
+    # Due to the unique constraint on DuffelbagUser.username, it's safe to only
+    # return the fist object.
     user = await (
         database.DuffelbagUser.objects()
-        .where(
-            (database.DuffelbagUser.username == username)
-            & (database.DuffelbagUser.password == password)
-        )
+        .where(database.DuffelbagUser.username == username)
         .first()
-    )
+    )  # fmt: skip
 
-    if user:
+    if not user:
+        # TODO: Custom exception type
+        msg = f"No Duffelbag user named {username!r} exists."
+        raise RuntimeError(msg)
+
+    try:
+        _HASHER.verify(user.password, password)
+
+    except argon2.exceptions.VerifyMismatchError as exc:
+        # TODO: Custom exception type
+        msg = f"The password entered for Duffelbag account {username!r} is incorrect."
+        raise RuntimeError(msg) from exc
+
+    else:
         return user
-
-    # TODO: Custom exception type
-    msg = f"No user named {username!r} exists, or the provided password is incorrect."
-    raise RuntimeError(msg)
 
 
 async def delete_user(*, username: str, password: str) -> None:
@@ -168,16 +183,10 @@ async def delete_user(*, username: str, password: str) -> None:
         The account could not be found; either the username does not exist or
         the password was incorrect.
     """
-    result: list[dict[str, object]] = await (
-        database.DuffelbagUser.delete()
-        .where(
-            (database.DuffelbagUser.username == username)
-            & (database.DuffelbagUser.password == password)
-        )
-        .returning(database.DuffelbagUser.id)
-    )
+    user = await login_user(username=username, password=password)
 
-    if result:
+    if user:
+        await user.remove()
         return
 
     # TODO: Custom exception type
@@ -186,9 +195,12 @@ async def delete_user(*, username: str, password: str) -> None:
 
 
 async def recover_users(
-    *, platform: Platform, platform_id: int
-) -> typing.Sequence[database.DuffelbagUser]:
+    *, platform: Platform, platform_id: int, password: str
+) -> database.DuffelbagUser:
     """Recover an existing Duffelbag account through a connected external platform account.
+
+    This updates the password of the connected account to the newly provided
+    password.
 
     Parameters
     ----------
@@ -196,6 +208,8 @@ async def recover_users(
         The external platform with which to recover a Duffelbag account.
     platform_id:
         The id of the account on the provided platform.
+    password:
+        The new password to use for the connected Duffelbag account.
 
     Returns
     -------
@@ -211,20 +225,27 @@ async def recover_users(
     """
     joined = database.DuffelbagUser.id.join_on(database.PlatformUser.user)
 
-    result = await (
+    duffelbag_user = await (
         database.DuffelbagUser.objects()
         .where((joined.platform_id == platform_id) & (joined.platform_name == platform.name))
+        .first()
     )  # fmt: skip
 
-    if result:
-        return result
+    if not duffelbag_user:
+        # TODO: Custom exception type
+        msg = (
+            f"External platform account with id '{platform_id}' on platform"
+            f" {platform.name!r} is not bound to any Duffelbag account."
+        )
+        raise RuntimeError(msg)
 
-    # TODO: Custom exception type
-    msg = (
-        f"External platform account with id '{platform_id}' on platform"
-        f" {platform.name!r} is not bound to any Duffelbag account."
+    # Update password.
+    duffelbag_user.password = _HASHER.hash(password)
+    await duffelbag_user.save(  # pyright: ignore[reportUnknownMemberType]
+        [database.DuffelbagUser.password]
     )
-    raise RuntimeError(msg)
+
+    return duffelbag_user
 
 
 # database.PlatformUser manipulation...

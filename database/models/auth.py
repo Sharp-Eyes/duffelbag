@@ -13,7 +13,9 @@ class DuffelbagUser(table.Table):
 
     id: columns.Serial
     username = columns.Varchar(32, unique=True)
-    password = columns.Varchar(32)
+
+    # This is the length of an argon2-encoded string with hash length 32.
+    password = columns.Varchar(97)
 
 
 class PlatformUser(table.Table):

@@ -12,6 +12,7 @@ uvloop = "^0.17.0"
 python-dotenv = "^0.21.0"
 arkprts = {git = "https://github.com/thesadru/arkprts"}
 piccolo = {extras = ["postgres"], version = "^0.113.0"}
+argon2-cffi = "^21.3.0"
 
 
 [tool.poetry.group.dev.dependencies]

@@ -52,6 +52,7 @@ repos:
           python-dotenv,
           arkprts,
           asyncpg,
+          argon2-cffi,
           # discord
           disnake,
           "git+https://github.com/DisnakeCommunity/disnake-ext-components",

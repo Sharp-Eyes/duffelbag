@@ -10,7 +10,6 @@ readme = "README.md"
 python = "^3.10"
 uvloop = "^0.17.0"
 python-dotenv = "^0.21.0"
-disnake = "^2.8.1"
 arkprts = {git = "https://github.com/thesadru/arkprts"}
 piccolo = {extras = ["postgres"], version = "^0.113.0"}
 
@@ -20,6 +19,12 @@ devtools = "^0.11.0"
 ruff = "^0.0.270"
 pre-commit = "^3.3.2"
 pyright = "^1.1.310"
+
+
+[tool.poetry.group.discord.dependencies]
+disnake = "^2.8.1"
+disnake-ext-plugins = {git = "https://github.com/DisnakeCommunity/disnake-ext-plugins"}
+disnake-ext-components = {git = "https://github.com/DisnakeCommunity/disnake-ext-components", rev = "rewrite"}
 
 
 [build-system]

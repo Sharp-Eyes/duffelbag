@@ -43,7 +43,7 @@ repos:
     rev: v0.16.4
     hooks:
       - id: slotscheck
-        name: Running slotscheck in all files.
+        name: Running slotscheck in all files.nal
         exclude: "piccolo_conf.py"
         additional_dependencies: [
           piccolo,
@@ -52,4 +52,8 @@ repos:
           python-dotenv,
           arkprts,
           asyncpg,
+          # discord
+          disnake,
+          "git+https://github.com/DisnakeCommunity/disnake-ext-components",
+          "git+https://github.com/DisnakeCommunity/disnake-ext-plugins",
         ]

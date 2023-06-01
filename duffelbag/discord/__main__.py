@@ -7,6 +7,7 @@ import pkgutil
 import typing
 
 import disnake
+import uvloop
 from disnake.ext import commands, components
 
 from duffelbag.discord import config, exts
@@ -89,4 +90,5 @@ async def _main() -> None:
 
 
 if __name__ == "__main__":
+    uvloop.install()
     asyncio.run(_main())

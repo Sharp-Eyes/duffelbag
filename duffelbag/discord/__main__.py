@@ -71,7 +71,12 @@ async def _callback_wrapper(
 
 
 async def _main() -> None:
-    bot = commands.InteractionBot(intents=disnake.Intents.none())
+    bot = commands.InteractionBot(
+        intents=disnake.Intents.none(),
+        reload=not config.BOT_CONFIG.DISCORD_IS_PROD,
+        sync_commands_debug=not config.BOT_CONFIG.DISCORD_IS_PROD,
+    )
+
     manager = components.get_manager()
     manager.add_to_bot(bot)
 

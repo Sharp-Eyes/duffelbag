@@ -12,6 +12,11 @@ LOCALISATION_DIR: typing.Final[pathlib.Path] = pathlib.Path.cwd() / "localisatio
 LOCALISATION_DATA: dict[str, dict[str, str]] = {}
 
 
+class _LazyFormatDict(dict[str, object]):
+    def __missing__(self, key: str) -> object:
+        return f"{{{key}}}"
+
+
 def update_localisation_data() -> dict[str, dict[str, str]]:
     """Update localisation data from localisation json files."""
     for file in LOCALISATION_DIR.iterdir():
@@ -23,7 +28,13 @@ def update_localisation_data() -> dict[str, dict[str, str]]:
     return LOCALISATION_DATA
 
 
-def localise(key: str, locale: str, **kwargs: object) -> str:
+def localise(
+    key: str,
+    locale: str,
+    *,
+    strict: bool = True,
+    format_map: typing.Mapping[str, object],
+) -> str:
     """Get a localised string with the provided key and locale.
 
     Any passed kwargs will be used to format the string.
@@ -34,8 +45,10 @@ def localise(key: str, locale: str, **kwargs: object) -> str:
         The key of the string that is to be localised.
     locale:
         The locale to use.
-    **kwargs:
-        Keyword-arguments used to format the localisation string.
+    strict:
+        Whether or not to require all format keys to be exhausted.
+    format_map:
+        A mapping used to format the localisation string.
 
     Returns
     -------
@@ -48,7 +61,10 @@ def localise(key: str, locale: str, **kwargs: object) -> str:
     else:
         string = LOCALISATION_DATA[locale][key]
 
-    return string.format_map(kwargs)
+    if not strict:
+        format_map = _LazyFormatDict(format_map)
+
+    return string.format_map(format_map)
 
 
 update_localisation_data()

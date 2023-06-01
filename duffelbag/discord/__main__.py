@@ -10,7 +10,7 @@ import disnake
 import uvloop
 from disnake.ext import commands, components
 
-from duffelbag.discord import config, exts
+from duffelbag.discord import bot, config, exts, localisation
 
 _LOGGER = logging.getLogger("duffelbag.discord")
 
@@ -72,21 +72,22 @@ async def _callback_wrapper(
 
 
 async def _main() -> None:
-    bot = commands.InteractionBot(
+    duffelbag = bot.Duffelbag(
         intents=disnake.Intents.none(),
         reload=not config.BOT_CONFIG.DISCORD_IS_PROD,
         sync_commands_debug=not config.BOT_CONFIG.DISCORD_IS_PROD,
     )
 
     manager = components.get_manager()
-    manager.add_to_bot(bot)
-
+    manager.add_to_bot(duffelbag)
     manager.as_callback_wrapper(_callback_wrapper)
 
-    for ext in _discover_exts():
-        bot.load_extension(ext)
+    localisation.initialise(duffelbag)
 
-    await bot.start(config.BOT_CONFIG.DISCORD_TOKEN)
+    for ext in _discover_exts():
+        duffelbag.load_extension(ext)
+
+    await duffelbag.start(config.BOT_CONFIG.DISCORD_TOKEN)
 
 
 if __name__ == "__main__":

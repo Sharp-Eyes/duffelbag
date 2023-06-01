@@ -11,9 +11,14 @@ import arkprts
 import asyncpg
 
 import database
+from duffelbag import exceptions
 
 # Ensure passwords are hashed at the correct length. Should be 32 chars.
 _HASHER = argon2.PasswordHasher(hash_len=32)
+
+# NOTE: Update docstrings if these are modified.
+MIN_PASS_LEN = 8
+MAX_PASS_LEN = 32
 
 
 class Platform(enum.Enum):
@@ -35,7 +40,6 @@ class _YostarAuthenticator:
 
     async def login_with_email(self, email: str, /) -> None:
         if self.email:
-            # TODO: Custom exception type
             msg = "An email has already been sent."
             raise RuntimeError(msg)
 
@@ -45,7 +49,6 @@ class _YostarAuthenticator:
 
     async def complete_login(self, verification_code: str) -> tuple[str, str]:
         if not self.email:
-            # TODO: Custom exception type
             msg = "A verification email must be sent first."
             raise RuntimeError(msg)
 
@@ -53,6 +56,9 @@ class _YostarAuthenticator:
         return await self.client._get_yostar_token(self.email, uid, token)
 
 
+# NOTE:
+# - Key: DuffelbagUser.id
+# - Value: (_YostarAuthenticator, authentication timeout task)
 _active_authenticators: dict[int, tuple[_YostarAuthenticator, asyncio.Task[None]]] = {}
 
 
@@ -67,6 +73,12 @@ def _start_timeout(key: int, delay: float = 300.0) -> tuple[float, asyncio.Task[
 
 
 # database.DuffelbagUser manipulation...
+
+
+def _ensure_valid_pass(password: str) -> None:
+    if not MAX_PASS_LEN >= len(password) >= MIN_PASS_LEN:
+        msg = "Passwords must be between 8 and 32 characters in length."
+        raise ValueError(msg)
 
 
 async def create_user(
@@ -99,26 +111,35 @@ async def create_user(
 
     Raises
     ------
-    :class:`RuntimeError`
+    :class:`ValueError`
+        The password is either shorter than 8 characters or longer than 32
+        characters.
+    :class:`exceptions.UserExists`
         A Duffelbag user with the provided name already exists.
+    :class:`exceptions.DuplicateUser`
+        The external account is already registered to a different Duffelbag
+        account. In this case, the new Duffelbag account is NOT created.
     """
+    _ensure_valid_pass(password)
+
     hashed = _HASHER.hash(password)
 
-    try:
-        await database.DuffelbagUser.insert(
-            new_user := database.DuffelbagUser(
-                username=username,
-                password=hashed,
-            )
-        )
-    except asyncpg.UniqueViolationError as exc:
-        # TODO: Custom exception type
-        msg = f"A user named {username!r} already exists. Please try another username."
-        raise RuntimeError(msg) from exc
+    db = database.get_db_from_table(database.DuffelbagUser)
+    new_user = database.DuffelbagUser(username=username, password=hashed)
 
-    await add_platform_account(new_user, platform=platform, platform_id=platform_id)
+    async with db.transaction():
+        try:
+            await database.DuffelbagUser.insert(new_user)
 
-    return new_user
+        except asyncpg.UniqueViolationError as exc:
+            msg = f"A user named {username!r} already exists. Please try another username."
+            raise exceptions.UserExists(msg, duffelbag_user=new_user) from exc
+
+        else:
+            # NOTE: If this raises, the transaction is automatically rolled back.
+            await add_platform_account(new_user, platform=platform, platform_id=platform_id)
+
+            return new_user
 
 
 async def login_user(*, username: str, password: str) -> database.DuffelbagUser:
@@ -138,10 +159,16 @@ async def login_user(*, username: str, password: str) -> database.DuffelbagUser:
 
     Raises
     ------
-    :class:`RuntimeError`
-        The user could not be found; either the username does not exist or the
-        password was incorrect.
+    :class:`ValueError`
+        The password is either shorter than 8 characters or longer than 32
+        characters.
+    :class:`exceptions.UserNotFound`
+        No Duffelbag user with the provided username exists.
+    :class:`exceptions.InvalidPassword`
+        The provided password was incorrect.
     """
+    _ensure_valid_pass(password)
+
     # Due to the unique constraint on DuffelbagUser.username, it's safe to only
     # return the fist object.
     user = await (
@@ -151,17 +178,15 @@ async def login_user(*, username: str, password: str) -> database.DuffelbagUser:
     )  # fmt: skip
 
     if not user:
-        # TODO: Custom exception type
         msg = f"No Duffelbag user named {username!r} exists."
-        raise RuntimeError(msg)
+        raise exceptions.UserNotFound(msg)
 
     try:
         _HASHER.verify(user.password, password)
 
     except argon2.exceptions.VerifyMismatchError as exc:
-        # TODO: Custom exception type
         msg = f"The password entered for Duffelbag account {username!r} is incorrect."
-        raise RuntimeError(msg) from exc
+        raise exceptions.InvalidPassword(msg) from exc
 
     else:
         return user
@@ -179,22 +204,19 @@ async def delete_user(*, username: str, password: str) -> None:
 
     Raises
     ------
-    :class:`RuntimeError`
-        The account could not be found; either the username does not exist or
-        the password was incorrect.
+    :class:`ValueError`
+        The password is either shorter than 8 characters or longer than 32
+        characters.
+    :class:`exceptions.UserNotFound`
+        No Duffelbag user with the provided username exists.
+    :class:`exceptions.InvalidPassword`
+        The provided password was incorrect.
     """
     user = await login_user(username=username, password=password)
-
-    if user:
-        await user.remove()
-        return
-
-    # TODO: Custom exception type
-    msg = f"No used named {username!r} exists, or the provided password is incorrect."
-    raise RuntimeError(msg)
+    await user.remove()
 
 
-async def recover_users(
+async def recover_user(
     *, platform: Platform, platform_id: int, password: str
 ) -> database.DuffelbagUser:
     """Recover an existing Duffelbag account through a connected external platform account.
@@ -219,10 +241,15 @@ async def recover_users(
 
     Raises
     ------
-    :class:`RuntimeError`
+    :class:`ValueError`
+        The password is either shorter than 8 characters or longer than 32
+        characters.
+    :class:`exceptions.UserNotFound`
         The external account is not registered to any existing Duffelbag
         account.
     """
+    _ensure_valid_pass(password)
+
     joined = database.DuffelbagUser.id.join_on(database.PlatformUser.user)
 
     duffelbag_user = await (
@@ -232,12 +259,11 @@ async def recover_users(
     )  # fmt: skip
 
     if not duffelbag_user:
-        # TODO: Custom exception type
         msg = (
             f"External platform account with id '{platform_id}' on platform"
             f" {platform.name!r} is not bound to any Duffelbag account."
         )
-        raise RuntimeError(msg)
+        raise exceptions.UserNotFound(msg)
 
     # Update password.
     duffelbag_user.password = _HASHER.hash(password)
@@ -273,26 +299,29 @@ async def add_platform_account(
 
     Raises
     ------
-    :class:`RuntimeError`
+    :class:`exceptions.DuplicateUser`
         The external account is already registered to a different Duffelbag
         account.
     """
+    platform_user = database.PlatformUser(
+        user=duffelbag_user.id,
+        platform_id=platform_id,
+        platform_name=platform.name,
+    )
+
     try:
-        await database.PlatformUser.insert(
-            platform_user := database.PlatformUser(
-                user=duffelbag_user.id,
-                platform_id=platform_id,
-                platform_name=platform.name,
-            )
-        )
+        await database.PlatformUser.insert(platform_user)
 
     except asyncpg.UniqueViolationError as exc:
-        # TODO: Custom exception type
         msg = (
             f"External platform account with id '{platform_id}' on platform"
             f" {platform.name!r} is already registered to a Duffelbag account."
         )
-        raise RuntimeError(msg) from exc
+        raise exceptions.DuplicateUser(
+            msg,
+            duffelbag_user=duffelbag_user,
+            account=platform_user,
+        ) from exc
 
     else:
         return platform_user
@@ -315,7 +344,7 @@ async def remove_platform_account(
 
     Raises
     ------
-    :class:`RuntimeError`
+    :class:`exceptions.UserNotFound`
         The external account is not registered to the provided Duffelbag
         account.
     """
@@ -332,13 +361,12 @@ async def remove_platform_account(
     if result:
         return
 
-    # TODO: Custom exception type
     msg = (
         f"No external platform account with id '{platform_id}' on platform"
         f" {platform.name!r} is registered to the Duffelbag account with"
         f" username {duffelbag_user.username!r} and ID '{duffelbag_user.id}'."
     )
-    raise RuntimeError(msg)
+    raise exceptions.UserNotFound(msg)
 
 
 async def list_connected_accounts(
@@ -393,33 +421,35 @@ async def start_authentication(
 
     Raises
     ------
-    :class:`RuntimeError`:
+    :class:`exceptions.DuplicateUser`:
         The email address is already registered to a Duffelbag account. This
         prevents the verification mail from being sent unnecessarily. Note that
         this can only occur if the user opted to store their email address.
+    :class:`exceptions.AlreadyAuthenticating`:
+        The user already has an ongoing authentication process.
     """
-    exists = await (
-        database.ArknightsUser.exists()  # pyright: ignore[reportUnknownMemberType]
+    existing_user = await (
+        database.ArknightsUser.objects()
         .where(database.ArknightsUser.email == email)
+        .first()
     )  # fmt: skip
-    if exists:
-        # TODO: Custom exception type
+    if existing_user:
         msg = (
-            f"The arknights account with email {email!r} is already registered"
-            " to a Duffelbag user."
+            f"The arknights account with email address {email!r} is already"
+            " registered to a Duffelbag user."
         )
-        raise RuntimeError(msg)
+        raise exceptions.DuplicateUser(msg, duffelbag_user=duffelbag_user, account=existing_user)
 
     if duffelbag_user.id in _active_authenticators:
-        # TODO: Custom exception type
         msg = f"Duffelbag user {duffelbag_user.username!r} is already undergoing authentication."
-        raise RuntimeError(msg)
+        raise exceptions.AlreadyAuthenticating(msg, duffelbag_user=duffelbag_user, email=email)
 
     authenticator = _YostarAuthenticator()
     await authenticator.login_with_email(email)
 
     delay, timeout_task = _start_timeout(duffelbag_user.id)
     _active_authenticators[duffelbag_user.id] = (authenticator, timeout_task)
+
     return delay, timeout_task
 
 
@@ -449,21 +479,21 @@ async def complete_authentication(
 
     Raises
     ------
-    :class:`RuntimeError`:
+    :class:`exceptions.NotAuthenticating`:
         The provided Duffelbag account is not currently undergoing an
         authentication process.
     """
-    authenticator, timeout_task = _active_authenticators.pop(duffelbag_user.id, (None, None))
-    if timeout_task:
-        timeout_task.cancel()
-
-    if not authenticator:
-        # TODO: Custom exception type
+    if duffelbag_user.id not in _active_authenticators:
         msg = (
-            f"The Duffelbag user with id {duffelbag_user.username!r} is not in"
-            " an active authentication process."
+            f"Duffelbag user {duffelbag_user.username!r} is not in an active"
+            " authentication process."
         )
-        raise RuntimeError(msg)
+        raise exceptions.NotAuthenticating(msg, duffelbag_user=duffelbag_user)
+
+    authenticator, timeout_task = _active_authenticators.pop(duffelbag_user.id)
+
+    if not timeout_task.done() and not timeout_task.cancelled():
+        timeout_task.cancel()
 
     uid, token = await authenticator.complete_login(verification_code)
 
@@ -504,26 +534,30 @@ async def add_arknights_account(
 
     Raises
     ------
-    :class:`RuntimeError`
+    :class:`exceptions.DuplicateUser`
         The external account is already registered to a different Duffelbag
         account.
     """
+    new_user = database.ArknightsUser(
+        user=duffelbag_user.id,
+        channel_uid=uid,
+        yostar_token=token,
+        email=email,
+    )
+
     try:
-        await database.ArknightsUser.insert(
-            new_user := database.ArknightsUser(
-                user=duffelbag_user.id,
-                channel_uid=uid,
-                yostar_token=token,
-                email=email,
-            )
-        )
+        await database.ArknightsUser.insert(new_user)
 
     except asyncpg.UniqueViolationError as exc:
-        # TODO: Custom exception type
         msg = "This Arknights user is already registered to a different Duffelbag account."
-        raise RuntimeError(msg) from exc
+        raise exceptions.DuplicateUser(
+            msg,
+            duffelbag_user=duffelbag_user,
+            account=new_user,
+        ) from exc
 
-    return new_user
+    else:
+        return new_user
 
 
 async def remove_arknights_account() -> typing.NoReturn:

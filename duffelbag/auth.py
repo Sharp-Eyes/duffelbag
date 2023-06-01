@@ -4,6 +4,7 @@
 
 import asyncio
 import enum
+import re
 import typing
 
 import argon2
@@ -15,10 +16,12 @@ from duffelbag import exceptions
 
 # Ensure passwords are hashed at the correct length. Should be 32 chars.
 _HASHER = argon2.PasswordHasher(hash_len=32)
-
-# NOTE: Update docstrings if these are modified.
 MIN_PASS_LEN = 8
 MAX_PASS_LEN = 32
+MIN_USER_LEN = 4
+MAX_USER_LEN = 32
+
+USER_PATTERN = re.compile(r"[a-zA-Z0-9\-_]{4,32}")
 
 
 class Platform(enum.Enum):
@@ -77,7 +80,17 @@ def _start_timeout(key: int, delay: float = 300.0) -> tuple[float, asyncio.Task[
 
 def _ensure_valid_pass(password: str) -> None:
     if not MAX_PASS_LEN >= len(password) >= MIN_PASS_LEN:
-        msg = "Passwords must be between 8 and 32 characters in length."
+        msg = f"Passwords must be between {MIN_PASS_LEN} and {MAX_PASS_LEN} characters in length."
+        raise ValueError(msg)
+
+
+def _ensure_valid_user(username: str) -> None:
+    if not MAX_USER_LEN >= len(username) >= MIN_USER_LEN:
+        msg = f"Usernames must be between {MIN_USER_LEN} and {MAX_USER_LEN} characters in length."
+        raise ValueError(msg)
+
+    if not USER_PATTERN.fullmatch(username):
+        msg = "Usernames must only contain alphanumerical characters, dashes and underscores."
         raise ValueError(msg)
 
 
@@ -112,14 +125,15 @@ async def create_user(
     Raises
     ------
     :class:`ValueError`
-        The password is either shorter than 8 characters or longer than 32
-        characters.
+        The provided username or password is too short or too long, or the
+        username contains invalid characters.
     :class:`exceptions.UserExists`
         A Duffelbag user with the provided name already exists.
     :class:`exceptions.DuplicateUser`
         The external account is already registered to a different Duffelbag
         account. In this case, the new Duffelbag account is NOT created.
     """
+    _ensure_valid_user(username)
     _ensure_valid_pass(password)
 
     hashed = _HASHER.hash(password)
@@ -160,13 +174,14 @@ async def login_user(*, username: str, password: str) -> database.DuffelbagUser:
     Raises
     ------
     :class:`ValueError`
-        The password is either shorter than 8 characters or longer than 32
-        characters.
+        The provided username or password is too short or too long, or the
+        username contains invalid characters.
     :class:`exceptions.UserNotFound`
         No Duffelbag user with the provided username exists.
     :class:`exceptions.InvalidPassword`
         The provided password was incorrect.
     """
+    _ensure_valid_user(username)
     _ensure_valid_pass(password)
 
     # Due to the unique constraint on DuffelbagUser.username, it's safe to only
@@ -205,8 +220,8 @@ async def delete_user(*, username: str, password: str) -> None:
     Raises
     ------
     :class:`ValueError`
-        The password is either shorter than 8 characters or longer than 32
-        characters.
+        The provided username or password is too short or too long, or the
+        username contains invalid characters.
     :class:`exceptions.UserNotFound`
         No Duffelbag user with the provided username exists.
     :class:`exceptions.InvalidPassword`
@@ -242,8 +257,8 @@ async def recover_user(
     Raises
     ------
     :class:`ValueError`
-        The password is either shorter than 8 characters or longer than 32
-        characters.
+        The provided username or password is too short or too long, or the
+        username contains invalid characters.
     :class:`exceptions.UserNotFound`
         The external account is not registered to any existing Duffelbag
         account.

@@ -1,5 +1,5 @@
 {
     "auth_recover": "## Password updated!\nYour Duffelbag account with name **{username}** has been updated to use password ||{password}||.",
-    "auth_new_short": "## Account successfully created!\nYour shiny new Duffelbag account with name **{username}** has been created.",
-    "auth_new_long": "## Account successfully created!\nYour shiny new Duffelbag account with name **{username}** has been created.\n\nAny commands run on this discord account will automatically use this Duffelbag account. You can register other Discord accounts to this Duffelbag account using {slash_bind}. You'll need to remember your username and password for this. If you ever forget them, you can reset your password using `{slash_recover}`."
+    "auth_new_collapsed": "## Account successfully created!\nYour shiny new Duffelbag account with name **{username}** has been created.",
+    "auth_new_expanded": "## Account successfully created!\nYour shiny new Duffelbag account with name **{username}** has been created.\n\nAny commands run on this discord account will automatically use this Duffelbag account.\nYou can register other Discord accounts to this Duffelbag account using {cmd$account_bind_platform}.\nYou'll need to remember your username and password for this.\nIf you ever forget them, you can reset your password using {cmd$account_recover}."
 }

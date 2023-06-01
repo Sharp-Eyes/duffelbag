@@ -8,7 +8,6 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.10"
-uvloop = "^0.17.0"
 python-dotenv = "^0.21.0"
 arkprts = {git = "https://github.com/thesadru/arkprts"}
 piccolo = {extras = ["postgres"], version = "^0.113.0"}
@@ -26,6 +25,11 @@ pyright = "^1.1.310"
 disnake = "^2.8.1"
 disnake-ext-plugins = {git = "https://github.com/DisnakeCommunity/disnake-ext-plugins"}
 disnake-ext-components = {git = "https://github.com/DisnakeCommunity/disnake-ext-components", rev = "rewrite"}
+
+
+[tool.poetry.group.speedups.dependencies]
+uvloop = "^0.17.0"
+orjson = "^3.8.14"
 
 
 [build-system]

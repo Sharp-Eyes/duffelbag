@@ -53,6 +53,9 @@ repos:
           arkprts,
           asyncpg,
           argon2-cffi,
+          # speedups
+          uvloop,
+          orjson,
           # discord
           disnake,
           "git+https://github.com/DisnakeCommunity/disnake-ext-components",

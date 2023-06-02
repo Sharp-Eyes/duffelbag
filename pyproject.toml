@@ -32,6 +32,10 @@ uvloop = "^0.17.0"
 orjson = "^3.8.14"
 
 
+[tool.poetry.scripts]
+"repopulate" = "scripts.repopulate:_sync_main"
+
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
@@ -118,3 +122,9 @@ ignore = [
 ]
 
 unfixable = ["RET502", "RET503"]
+
+[tool.ruff.per-file-ignores]
+# T201: Allow printing in scripts.
+"scripts/*" = [
+    "T201",
+]

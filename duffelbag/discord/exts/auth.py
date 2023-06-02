@@ -1,8 +1,5 @@
 """Bot plugin for Discord <-> Arknights user authentication."""
 
-import typing
-
-import attr
 import disnake
 from disnake.ext import commands, components, plugins
 
@@ -10,7 +7,7 @@ from duffelbag import auth, exceptions
 from duffelbag.discord import localisation
 
 plugin = plugins.Plugin()
-manager = components.get_manager(__name__)
+external_manager = components.get_manager("duffelbag.restricted")
 
 
 @plugin.slash_command()
@@ -100,77 +97,12 @@ async def account_create(
             inter.locale,
             format_map={"username": username},
         ),
-        components=ExpandButton(key_base="auth_new", params=[username], collapsed=True),
+        components=external_manager.make_button("ExpBut", key_base="auth_new", params=[username]),
         ephemeral=True,
     )
 
 
 # TODO: Move this to some separate file.
-_EXPAND: typing.Final[tuple[str, str, str]] = (
-    "Expand...",
-    "<:expand:1113954208014684252>",
-    "_collapsed",
-)
-_COLLAPSE: typing.Final[tuple[str, str, str]] = (
-    "Collapse...",
-    "<:collapse:1113954205766537226>",
-    "_expanded",
-)
-
-
-class _StringListParser(components.Parser[list[str]]):
-    # TODO: Implement list support into ext-components :trol:
-
-    def loads(self, _: disnake.Interaction, arg: str) -> list[str]:
-        return arg.split(",")
-
-    def dumps(self, arg: list[str]) -> str:
-        return ",".join(arg)
-
-
-class _PosToFormatMap(dict[str, object]):
-    def __init__(self, *args: object, strict: bool = True) -> None:
-        self._arg_iter = iter(args)
-        self.strict = strict
-
-        super().__init__()
-
-    def __missing__(self, key: str) -> object:
-        if not self.strict:
-            return next(self._arg_iter, f"{{{key}}}")
-        return next(self._arg_iter)
-
-
-@manager.register
-class ExpandButton(components.RichButton):
-    """A button that toggles a message between expanded and collapsed state."""
-
-    # Start collapsed, so show expand label and emoji.
-    label: str = _EXPAND[0]
-    emoji: str = _EXPAND[1]
-
-    # Custom id params:
-    key_base: str
-    params: list[str] = components.field(
-        attr.NOTHING, parser=_StringListParser()  # pyright: ignore[reportGeneralTypeIssues]
-    )
-    collapsed: bool
-
-    def _format(self, string: str) -> str:
-        return string.format_map(_PosToFormatMap(*self.params, strict=False))
-
-    async def callback(self, inter: components.MessageInteraction) -> None:
-        """Toggle between expanded/collapsed."""
-        self.collapsed ^= True
-        self.label, self.emoji, key_ext = _EXPAND if self.collapsed else _COLLAPSE
-
-        message = localisation.localise(
-            self.key_base + key_ext,
-            inter.locale,
-            strict=False,
-        )
-
-        await inter.response.edit_message(self._format(message), components=self)
 
 
 @account.sub_command_group(name="bind")  # pyright: ignore[reportUnknownMemberType]

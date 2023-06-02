@@ -2,7 +2,6 @@
 
 import asyncio
 import importlib
-import logging
 import pkgutil
 import typing
 
@@ -11,9 +10,6 @@ import uvloop
 from disnake.ext import commands, components
 
 from duffelbag.discord import bot, config, exts, localisation
-
-_LOGGER = logging.getLogger("duffelbag.discord")
-
 
 # Extensions.
 
@@ -29,9 +25,9 @@ def _discover_exts() -> typing.Generator[str, None, None]:
         raise ImportError(name=name)
 
     module_visitor = pkgutil.walk_packages(
-        exts.__path__,
-        f"{exts.__name__}.",
-        onerror=on_error,
+        path=exts.__path__,  # Start at exts submodule,
+        prefix=f"{exts.__name__}.",  # Prefix with exts submodule dothpath for absolute imports,
+        onerror=on_error,  # Raise ImportErrors if anything unexpected happens.
     )
 
     for module_info in module_visitor:
@@ -39,36 +35,6 @@ def _discover_exts() -> typing.Generator[str, None, None]:
 
         if isinstance(module, _ExtensionAware):
             yield module_info.name
-
-
-# Component manager callback wrapper.
-
-
-async def _callback_wrapper(
-    manager: components.ComponentManager,
-    component: components.api.RichComponent,
-    _: disnake.Interaction,
-) -> typing.AsyncGenerator[None, None]:
-    try:
-        # Run component callback...
-        yield
-
-    except Exception as exc:
-        # Log any exception...
-        exc_info = type(exc), exc, exc.__traceback__.tb_next if exc.__traceback__ else None
-        logging.exception(
-            "An exception occurred while handling the callback for component %r:",
-            manager.make_identifier(type(component)),
-            exc_info=exc_info,
-        )
-        raise
-
-    else:
-        # Log success...
-        logging.info(
-            "Successfully invoked the callback component %r.",
-            manager.make_identifier(type(component)),
-        )
 
 
 async def _main() -> None:
@@ -80,7 +46,6 @@ async def _main() -> None:
 
     manager = components.get_manager()
     manager.add_to_bot(duffelbag)
-    manager.as_callback_wrapper(_callback_wrapper)
 
     localisation.initialise(duffelbag)
 

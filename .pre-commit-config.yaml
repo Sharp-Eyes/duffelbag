@@ -58,6 +58,6 @@ repos:
           orjson,
           # discord
           disnake,
-          "git+https://github.com/DisnakeCommunity/disnake-ext-components.git@rewrite",
+          "git+https://github.com/DisnakeCommunity/disnake-ext-components.git@90bfb6949bed072565b47d3beeec95aa0de0a058",
           "git+https://github.com/DisnakeCommunity/disnake-ext-plugins",
         ]

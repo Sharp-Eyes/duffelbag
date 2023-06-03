@@ -47,10 +47,10 @@ class _PosToFormatMap(dict[str, object]):
 
         super().__init__()
 
-    def __getitem__(self, key: str) -> object:
-        if not self.strict:
-            return next(self._arg_iter, f"{{{key}}}")
-        return next(self._arg_iter)
+    def __missing__(self, key: str) -> object:
+        value = next(self._arg_iter) if self.strict else next(self._arg_iter, f"{{{key}}}")
+        self[key] = value
+        return value
 
 
 @manager.register(identifier="ExpBut")

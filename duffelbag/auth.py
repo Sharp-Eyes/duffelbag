@@ -27,8 +27,8 @@ USER_PATTERN = re.compile(r"[a-zA-Z0-9\-_]{4,32}")
 class Platform(enum.Enum):
     """External platforms supported by Duffelbag."""
 
-    DISCORD = enum.auto()
-    ELUDRIS = enum.auto()
+    DISCORD = "Discord"
+    ELUDRIS = "Eludris"
 
 
 class _YostarAuthenticator:

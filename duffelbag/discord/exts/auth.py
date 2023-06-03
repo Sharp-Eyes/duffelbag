@@ -44,27 +44,6 @@ async def recover_account(inter: disnake.CommandInteraction, password: str = _PA
     )
 
 
-@recover_account.error  # pyright: ignore  # noqa: PGH003
-async def recover_account_handler(
-    inter: disnake.Interaction, exception: commands.CommandInvokeError
-) -> None:
-    """Handle invalid recovery attempts.
-
-    This handles exceptions raised by `auth.recover_user`. We don't need to
-    handle `ValueError`s because of slash command input validation.
-    """
-    exception = getattr(exception, "original", exception)
-
-    if isinstance(exception, exceptions.UserNotFound):
-        await inter.response.send_message(
-            "You do not appear to have registered a Duffelbag account.",
-            ephemeral=True,
-        )
-        return
-
-    raise
-
-
 _USER_PARAM = commands.Param(
     min_length=auth.MIN_USER_LEN,
     max_length=auth.MAX_USER_LEN,
@@ -97,7 +76,9 @@ async def account_create(
             inter.locale,
             format_map={"username": username},
         ),
-        components=external_manager.make_button("ExpBut", key_base="auth_new", params=[username]),
+        components=external_manager.make_button(
+            "ExpBut", key_base="auth_new", params=[username, auth.Platform.DISCORD.value]
+        ),
         ephemeral=True,
     )
 
@@ -114,6 +95,32 @@ async def account_bind(_: disnake.CommandInteraction) -> None:
 async def account_bind_platform(inter: disnake.CommandInteraction) -> None:
     """Bind your Discord account to a Duffelbag account."""
     await inter.response.send_message("Your mother.")
+
+
+@recover_account.error  # pyright: ignore  # noqa: PGH003
+@account_create.error  # pyright: ignore  # noqa: PGH003
+@account_bind_platform.error  # pyright: ignore  # noqa: PGH003
+async def recover_account_handler(
+    inter: disnake.Interaction, exception: commands.CommandInvokeError
+) -> None:
+    """Handle invalid recovery attempts.
+
+    This handles exceptions raised by `auth.recover_user`.
+    """
+    # TODO: Move error message text to localisation files.
+    exception = getattr(exception, "original", exception)
+
+    if isinstance(exception, exceptions.UserNotFound):
+        await inter.response.send_message(
+            "You do not appear to have registered a Duffelbag account.",
+            ephemeral=True,
+        )
+        return
+
+    if isinstance(exception, ValueError):
+        await inter.response.send_message(str(exception), ephemeral=True)
+
+    raise
 
 
 setup, teardown = plugin.create_extension_handlers()

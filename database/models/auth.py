@@ -38,14 +38,10 @@ class ArknightsUser(table.Table):
     """The database representation of a user's Arknights authentication data."""
 
     id: columns.Serial
-    user = columns.ForeignKey(references=DuffelbagUser)
+    user = columns.ForeignKey(DuffelbagUser)
     channel_uid = columns.Varchar(16)
     yostar_token = columns.Varchar(32)
-
-    # NOTE: Email only serves to pre-warn when a user tries to register with an
-    #       account that is already registered. Since it's privacy-sensitive
-    #       information, we'll keep it nullable and opt-in.
-    email = columns.Email(null=True)
+    email = columns.Email()
 
     # NOTE: As of migration 2023-05-31T10:47:00:954167, there is a composite
     #       unique constraint on (channel_uid, yostar_token) with name

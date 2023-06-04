@@ -112,10 +112,8 @@ async def populate_characters(
         # This should cascade to all other tables. Thanks, foreignkeys.
         await database.Character.delete(force=True)
 
-    db = database.get_db_from_table(database.Character)
-
     for character in raw_characters:
-        async with db.transaction():
+        async with database.get_db().transaction():
             # Insert character.
             await database.Character.insert(
                 database.Character(

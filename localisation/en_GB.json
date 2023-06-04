@@ -1,5 +1,20 @@
 {
     "auth_recover": "## Password updated!\nYour Duffelbag account with name **{username}** has been updated to use password ||{password}||.",
     "auth_new_collapsed": "## Account successfully created!\nYour shiny new Duffelbag account with name **{username}** has been created.",
-    "auth_new_expanded": "## Account successfully created!\nYour shiny new Duffelbag account with name **{username}** has been created.\n\nAny commands run on this {platform} account will automatically use this Duffelbag account.\nYou can register other {platform} accounts to this Duffelbag account using {cmd$account_bind_platform}.\nYou'll need to remember your username and password to do this.\nIf you ever forget them, you can reset your password using {cmd$account_recover}."
+    "auth_new_expanded": "## Account successfully created!\nYour shiny new Duffelbag account with name **{username}** has been created.\n\nAny commands run on this {platform} account will automatically use this Duffelbag account.\nYou can register other {platform} accounts to this Duffelbag account using {cmd$account_bind_platform}.\nYou'll need to remember your username and password to do this.\nIf you ever forget them, you can reset your password using {cmd$account_recover}.",
+    "auth_bind": "## Account successfully bound!\n\nYour {platform} account has successfully been bound to the Duffelbag account with username **{username}**.",
+
+    "exc_auth_credsize": "The provided {credential} is of invalid length: {credential}s must be between {min} and {max} characters long.",
+    "exc_auth_credchar": "The provided {credential} contains invalid characters.\nPlease ensure you only use '{allowed_chars}'.",
+    "exc_auth_inprog": "This Arknights account is already undergoing a verification progress.\n\nPlease try again later.",
+    "exc_auth_noprog": "This Arknights account is not yet undergoing a verification progress.\nIf this is unexpected, it may be the case that your authentication attempt took too long.\n\nPlease try authenticating again.",
+    "exc_auth_dfb_exists_collapsed": "You appear to already have an existing Duffelbag account.",
+    "exc_auth_dfb_exists_expanded": "You appear to already have an existing Duffelbag account.\n\nYour existing account is named **{username}**.\nIf you can't remember your account password, you can reset it using {cmd$account_recover}.",
+    "exc_auth_dfb_loginfail": "No Duffelbag user with username {username} exists, or the provided password was incorrect.\nPlease validate you entered everything correctly.\nNote that both username and password are case-sensitive.",
+    "exc_auth_pf_loginfail": "This {platform} account does not appear to be bound to a Duffelbag account.",
+    "exc_auth_pf_exists": "Your {platform} account appears to already be registered to a Duffelbag account with name **{existing_username}**.\nIf you believe this to be in error, please contact the developer.",
+    "exc_auth_pf_exists_self": "Your {platform} account is already registered to your Duffelbag account.",
+    "exc_auth_ak_loginfail": "This Arknights account does not appear to be bound to a Duffelbag account.",
+    "exc_auth_ak_exists": "Your Arknights account appears to already be registered to a Duffelbag account with name **{existing_username}**.\nIf you believe this to be in error, please contact the developer.",
+    "exc_auth_ak_exists_self": "Your Arknights account is already registered to your Duffelbag account."
 }

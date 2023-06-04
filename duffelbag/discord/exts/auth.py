@@ -1,10 +1,17 @@
 """Bot plugin for Discord <-> Arknights user authentication."""
 
+import typing
+
 import disnake
 from disnake.ext import commands, components, plugins
+from disnake.ext.components import interaction as interaction_
 
 from duffelbag import auth, exceptions
 from duffelbag.discord import localisation
+
+# TODO: Expose a type like this in ext-components somewhere
+_MessageComponents = interaction_.Components[interaction_.MessageComponents]
+
 
 plugin = plugins.Plugin()
 external_manager = components.get_manager("duffelbag.restricted")
@@ -77,13 +84,12 @@ async def account_create(
             format_map={"username": username},
         ),
         components=external_manager.make_button(
-            "ExpBut", key_base="auth_new", params=[username, auth.Platform.DISCORD.value]
+            "ExpBut",
+            key_base="auth_new",
+            params=[username, auth.Platform.DISCORD.value],
         ),
         ephemeral=True,
     )
-
-
-# TODO: Move this to some separate file.
 
 
 @account.sub_command_group(name="bind")  # pyright: ignore[reportUnknownMemberType]
@@ -92,35 +98,93 @@ async def account_bind(_: disnake.CommandInteraction) -> None:
 
 
 @account_bind.sub_command(name="platform")  # pyright: ignore[reportUnknownMemberType]
-async def account_bind_platform(inter: disnake.CommandInteraction) -> None:
-    """Bind your Discord account to a Duffelbag account."""
-    await inter.response.send_message("Your mother.")
-
-
-@recover_account.error  # pyright: ignore  # noqa: PGH003
-@account_create.error  # pyright: ignore  # noqa: PGH003
-@account_bind_platform.error  # pyright: ignore  # noqa: PGH003
-async def recover_account_handler(
-    inter: disnake.Interaction, exception: commands.CommandInvokeError
+async def account_bind_platform(
+    inter: disnake.CommandInteraction,
+    username: str = _USER_PARAM,
+    password: str = _PASS_PARAM,
 ) -> None:
+    """Bind your Discord account to an existing Duffelbag account."""
+    duffelbag_user = await auth.login_user(username=username, password=password)
+
+    await auth.add_platform_account(
+        duffelbag_user,
+        platform=auth.Platform.DISCORD,
+        platform_id=inter.author.id,
+    )
+
+    await inter.response.send_message(
+        localisation.localise(
+            "auth_bind",
+            locale=inter.locale,
+            format_map={
+                "platform": auth.Platform.DISCORD.value,
+                "username": username,
+            },
+        ),
+        ephemeral=True,
+    )
+
+
+@account.error  # pyright: ignore  # noqa: PGH003
+async def account_error_handler(
+    inter: disnake.Interaction,
+    exception: commands.CommandInvokeError,
+) -> typing.Literal[True]:
     """Handle invalid recovery attempts.
 
     This handles exceptions raised by `auth.recover_user`.
     """
-    # TODO: Move error message text to localisation files.
     exception = getattr(exception, "original", exception)
 
-    if isinstance(exception, exceptions.UserNotFound):
-        await inter.response.send_message(
-            "You do not appear to have registered a Duffelbag account.",
-            ephemeral=True,
-        )
-        return
+    params: dict[str, object] = {}
+    msg_components: _MessageComponents = []
 
-    if isinstance(exception, ValueError):
-        await inter.response.send_message(str(exception), ephemeral=True)
+    match exception:
+        case exceptions.CredentialSizeViolation():
+            key = "exc_auth_credsize"
 
-    raise
+        case exceptions.CredentialCharacterViolation():
+            key = "exc_auth_credchar"
+
+        case exceptions.AuthStateError(in_progress=in_progress):
+            key = "exc_auth_inprog" if in_progress else "exc_auth_noprog"
+
+        case exceptions.DuffelbagUserExists(username=username):
+            key = "exc_auth_dfb_exists_collapsed"
+            msg_components.append(
+                external_manager.make_button(
+                    "ExpBut",
+                    key_base="exc_auth_dfb_exists",
+                    params=[username],
+                )
+            )
+
+        case exceptions.DuffelbagLoginFailure():
+            key = "exc_auth_dfb_loginfail"
+
+        case exceptions.PlatformLoginFailure():
+            key = "exc_auth_pf_loginfail"
+
+        case exceptions.PlatformConnectionExists(is_own=is_own):
+            key = "exc_auth_pf_exists_self" if is_own else "exc_auth_pf_exists"
+            params["platform"] = auth.Platform.DISCORD.value
+
+        case exceptions.ArknightsConnectionExists(is_own=is_own):
+            key = "exc_auth_ak_exists_self" if is_own else "exc_auth_ak_exists"
+
+        case _:
+            raise
+
+    params |= exception.to_dict()
+    wrapped = components.wrap_interaction(inter)
+
+    await wrapped.response.send_message(
+        localisation.localise(key, inter.locale, format_map=params),
+        components=msg_components,
+        ephemeral=True,
+    )
+
+    return True
 
 
 setup, teardown = plugin.create_extension_handlers()

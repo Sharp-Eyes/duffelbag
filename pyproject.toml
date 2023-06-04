@@ -12,6 +12,8 @@ python-dotenv = "^0.21.0"
 arkprts = {git = "https://github.com/thesadru/arkprts"}
 piccolo = {extras = ["postgres"], version = "^0.113.0"}
 argon2-cffi = "^21.3.0"
+colorlog = "^6.7.0"
+coloredlogs = "^15.0.1"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -105,6 +107,7 @@ select = [
 # ANN101, ANN102 ask for `self` and `cls` annotations, what?
 # RET505-RET508 does not allow for any branches where it is an elif and else after a return
 # PLC0414 doesn't support `import foo as foo` to reexport.
+# S101 doesn't allow assertions.
 ignore = [
     "F403",
     "F405",
@@ -119,6 +122,7 @@ ignore = [
     "RET507",
     "RET508",
     "PLC0414",
+    "S101",
 ]
 
 unfixable = ["RET502", "RET503"]

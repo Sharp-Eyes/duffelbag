@@ -1,88 +1,107 @@
 """Module containing exceptions raised by the Duffelbag bot."""
 
-import database
+import attrs
 
 
+@attrs.define(auto_exc=True, slots=False, init=False)
 class DuffelbagException(Exception):
     """Base exception class for exceptions raised by Duffelbag."""
 
-    def __init__(self, message: str, *args: object) -> None:
-        self.message = message
+    message: str
+    """Error message for internal use."""
 
-        super().__init__(message, *args)
+    def to_dict(self) -> dict[str, object]:
+        """Return a dict mapping field name to value for localisation string formatting."""
+        return attrs.asdict(self)
 
 
+@attrs.define(auto_exc=True, slots=False, init=False)
 class AuthException(DuffelbagException):
     """Base exception class for exceptions raised as part of authentication."""
 
 
-class AlreadyAuthenticating(AuthException):
+@attrs.define(auto_exc=True, slots=False, init=True)
+class CredentialSizeViolation(DuffelbagException):
+    """Login credentials were too short or too long."""
+
+    credential: str
+    min: int
+    max: int
+
+
+@attrs.define(auto_exc=True, slots=False, init=True)
+class CredentialCharacterViolation(DuffelbagException):
+    """Login credentials used invalid characters."""
+
+    credential: str
+    allowed_chars: str
+
+
+@attrs.define(auto_exc=True, slots=False, init=True)
+class AuthStateError(AuthException):
     """A user tried to authenticate multiple Arknights accounts simultaneously."""
 
-    def __init__(
-        self,
-        message: str,
-        *,
-        duffelbag_user: database.DuffelbagUser,
-        email: str,
-    ) -> None:
-        self.message = message
-        self.duffelbag_user = duffelbag_user
-        self.email = email
-
-        super().__init__(message, duffelbag_user, email)
+    username: str
+    """The username of the Duffelbag account."""
+    in_progress: bool
+    """Whether the authentication was already in progress or not."""
 
 
-class NotAuthenticating(AuthException):
-    """A user tried to complete Arknights account authentication without starting it."""
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        duffelbag_user: database.DuffelbagUser,
-    ) -> None:
-        self.message = message
-        self.duffelbag_user = duffelbag_user
-
-        super().__init__(message, duffelbag_user)
-
-
-class UserExists(AuthException):
+@attrs.define(auto_exc=True, slots=False, init=True)
+class DuffelbagUserExists(AuthException):
     """A new user could not be created because it conflicts with an existing one."""
 
-    def __init__(
-        self,
-        message: str,
-        *,
-        duffelbag_user: database.DuffelbagUser,
-    ) -> None:
-        self.message = message
-        self.duffelbag_user = duffelbag_user
-
-        super().__init__(message, duffelbag_user)
+    username: str
+    """The username of the Duffelbag account."""
 
 
-class UserNotFound(AuthException):
-    """A user could not be retrieved because the provided data do not match an existing user."""
+@attrs.define(auto_exc=True, slots=False, init=True)
+class DuffelbagLoginFailure(AuthException):
+    """Invalid credentials for a Duffelbag account were provided."""
+
+    username: str
+    """The username of the Duffelbag account."""
 
 
-class InvalidPassword(AuthException):
-    """The provided password was invalid."""
+@attrs.define(auto_exc=True, slots=False, init=True)
+class PlatformLoginFailure(AuthException):
+    """Failed to login to a Duffelbag account by means of a provided platform account."""
+
+    platform: str
+    """The name of the target platform."""
 
 
-class DuplicateUser(AuthException):
-    """An attempt was made to link the same user to two different accounts."""
+@attrs.define(auto_exc=True, slots=False, init=True)
+class PlatformConnectionExists(AuthException):
+    """Attempted to connect the same external account to two different Duffelbag accounts."""
 
-    def __init__(
-        self,
-        message: str,
-        *,
-        duffelbag_user: database.DuffelbagUser,
-        account: database.PlatformUser | database.ArknightsUser,
-    ) -> None:
-        self.message = message
-        self.duffelbag_user = duffelbag_user
-        self.account = account
+    username: str
+    """The username of the Duffelbag account."""
+    existing_username: str
+    """The username of the existing Duffelbag account."""
+    is_own: bool
+    """Whether the platform account is registered to the same Duffelbag account."""
 
-        super().__init__(message, duffelbag_user, account)
+
+@attrs.define(auto_exc=True, slots=False, init=True)
+class PlatformConnectionNotFound(AuthException):
+    """Could not find a connected account for a given Duffelbag account."""
+
+    username: str
+    """The username of the Duffelbag account."""
+    platform: str
+    """The name of the target platform."""
+
+
+@attrs.define(auto_exc=True, slots=False, init=True)
+class ArknightsConnectionExists(AuthException):
+    """Attempted to connect the same Arknights account to two different Duffelbag accounts."""
+
+    username: str
+    """The username of the Duffelbag account that made the request."""
+    existing_username: str
+    """The username of the existing Duffelbag account."""
+    email: str
+    """The email address of the existing Arknights account."""
+    is_own: bool
+    """Whether the Arknights account is registered to the same Duffelbag account."""

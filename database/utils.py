@@ -6,9 +6,23 @@ import typing
 
 from piccolo import engine, table
 
+__all__: typing.Sequence[str] = ("get_db", "rollback_transaction")
 
-def get_db_from_table(table_: type[table.Table]) -> engine.PostgresEngine:
+
+class _MetaTable(table.Table):
+    # NOTE: This meta table only serves to access piccolo database features.
+    ...
+
+
+def get_db() -> engine.PostgresEngine:
     """Get the database from any piccolo table."""
     return typing.cast(
-        engine.PostgresEngine, table_._meta.db  # pyright: ignore[reportUnknownMemberType]
+        engine.PostgresEngine, _MetaTable._meta.db  # pyright: ignore[reportUnknownMemberType]
     )
+
+
+async def rollback_transaction() -> None:
+    """Rollback the currently active transaction, if any."""
+    transaction = get_db().current_transaction.get()
+    if transaction:
+        await transaction.rollback()

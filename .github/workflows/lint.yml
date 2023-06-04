@@ -31,11 +31,14 @@ jobs:
       - name: Enable in-project venv
         run: poetry config virtualenvs.in-project true
 
+      - name: Lock dependencies
+        run: poetry lock
+
       - name: Load cached virtualenv
         uses: actions/cache@v2
         with:
           path: ./.venv
-          key: virtualenv
+          key: virtualenv-${{ hashfiles('./poetry.lock') }}
 
       - name: Install dependencies
         run: poetry install

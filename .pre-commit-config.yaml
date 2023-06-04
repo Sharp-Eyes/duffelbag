@@ -53,6 +53,7 @@ repos:
           arkprts,
           asyncpg,
           argon2-cffi,
+          coloredlogs,
           # speedups
           uvloop,
           orjson,

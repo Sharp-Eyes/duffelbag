@@ -9,6 +9,7 @@ import disnake
 import uvloop
 from disnake.ext import commands, components
 
+from duffelbag import log
 from duffelbag.discord import bot, config, exts, localisation
 
 # Extensions.
@@ -48,6 +49,7 @@ async def _main() -> None:
     manager.add_to_bot(duffelbag)
 
     localisation.initialise(duffelbag)
+    log.initialise()
 
     for ext in _discover_exts():
         duffelbag.load_extension(ext)

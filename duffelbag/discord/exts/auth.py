@@ -6,8 +6,10 @@ import disnake
 from disnake.ext import commands, components, plugins
 from disnake.ext.components import interaction as interaction_
 
-from duffelbag import auth, exceptions
+from duffelbag import auth, exceptions, log
 from duffelbag.discord import localisation
+
+_LOGGER = log.get_logger(__name__)
 
 # TODO: Expose a type like this in ext-components somewhere
 _MessageComponents = interaction_.Components[interaction_.MessageComponents]
@@ -134,6 +136,11 @@ async def account_error_handler(
 
     This handles exceptions raised by `auth.recover_user`.
     """
+    _LOGGER.trace(
+        "Handling auth exception of type %r for user %r.",
+        type(exception).__name__,
+        inter.author.id,
+    )
     exception = getattr(exception, "original", exception)
 
     params: dict[str, object] = {}
@@ -173,6 +180,7 @@ async def account_error_handler(
             key = "exc_auth_ak_exists_self" if is_own else "exc_auth_ak_exists"
 
         case _:
+            _LOGGER.trace("Exception went unhandled in local error handler.")
             raise
 
     params |= exception.to_dict()
@@ -184,6 +192,7 @@ async def account_error_handler(
         ephemeral=True,
     )
 
+    _LOGGER.trace("Exception handled successfully in local error handler.")
     return True
 
 

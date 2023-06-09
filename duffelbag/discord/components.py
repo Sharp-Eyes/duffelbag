@@ -1,12 +1,13 @@
 """Utilities for components."""
 
-import logging
 import typing
 
 import disnake
 from disnake.ext import components
 
-_LOGGER = logging.getLogger(__name__)
+from duffelbag import log
+
+_LOGGER = log.get_logger(__name__)
 
 
 root_manager = components.get_manager()
@@ -21,6 +22,7 @@ async def log_callback_result(
     """Log the callback result for *all* component interactions."""
     try:
         # Run component callback...
+        _LOGGER.trace("Running component %r on manager %r.", type(component).__name__, manager.name)
         yield
 
     except Exception:
@@ -51,10 +53,16 @@ restricted_manager = components.get_manager("duffelbag.restricted")
 @restricted_manager.as_callback_wrapper
 async def component_perms(
     manager: components.ComponentManager,
-    _component: components.api.RichComponent,
+    component: components.api.RichComponent,
     inter: disnake.Interaction,
 ) -> typing.AsyncGenerator[None, None]:
     """Check permissions for components on this manager."""
+    _LOGGER.trace(
+        "Checking permissions for user %r w.r.t. component %r.",
+        inter.author.id,
+        type(component).__name__,
+    )
+
     if not isinstance(inter, disnake.MessageInteraction):
         msg = f"Manager {manager.name!r} only supports message interactions."
         raise TypeError(msg)
@@ -67,6 +75,7 @@ async def component_perms(
         # handles the ownership check or it intentionally doesn't check for
         # ownership.
         # (In reality, this won't ever happen as we only use slash commands)
+        _LOGGER.trace("Skipping permissions check.")
         yield
         return
 
@@ -76,8 +85,11 @@ async def component_perms(
         and source_interaction.author != inter.author  # Allow only the original command author,
         and not inter.author.guild_permissions.manage_messages  # Allow anyone with manage_messages permissions,  # noqa: E501
     ):
+        _LOGGER.trace("Permissions check failed.")
+
         # TODO: Custom exception!
         msg = "You are not allowed to use this component!"
         raise RuntimeError(msg)
 
+    _LOGGER.trace("Permissions check succeeded.")
     yield

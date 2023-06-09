@@ -19,7 +19,7 @@ class _BaseConfig(pydantic.BaseModel):
     @classmethod
     def from_env(cls) -> typing_extensions.Self:
         if cls is _BaseConfig:
-            msg = f"{cls.__name__} is not instantiable."
+            msg = f"{cls.__name__!r} is not instantiable."
             raise TypeError(msg)
 
         return cls(**os.environ)

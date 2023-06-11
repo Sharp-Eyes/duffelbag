@@ -5,7 +5,10 @@ import typing
 import disnake
 from disnake.ext import components, plugins
 
+from duffelbag import log
 from duffelbag.discord import localisation
+
+_LOGGER = log.get_logger(__name__)
 
 _EXPAND: typing.Final[tuple[str, str, str]] = (
     "Expand...",
@@ -72,6 +75,12 @@ class ExpandButton(components.RichButton):
     async def callback(self, inter: components.MessageInteraction) -> None:
         """Toggle between expanded/collapsed."""
         self.collapsed ^= True
+        _LOGGER.trace(
+            "Toggling expand button state for user %r to %r.",
+            inter.author.name,
+            "collapsed" if self.collapsed else "expanded",
+        )
+
         self.label, self.emoji, key_ext = _EXPAND if self.collapsed else _COLLAPSE
 
         # NOTE: strict=False is required here as we need to format with

@@ -2,6 +2,7 @@
 
 import logging
 import sys
+import types
 import typing
 import warnings
 
@@ -33,15 +34,34 @@ DEBUG: typing.Final[int] = logging.DEBUG
 NOTSET: typing.Final[int] = logging.NOTSET
 
 
+_ExcInfoType = tuple[type[Exception], Exception, types.TracebackType]
+
+
 class DuffelbagLogger(logging.Logger):
-    def trace(self, msg: str, *args: object, **kwargs: object) -> None:
+    def trace(  # noqa: PLR0913
+        self,
+        msg: str,
+        *args: object,
+        exc_info: _ExcInfoType | None = None,
+        stack_info: bool = False,
+        stacklevel: int = 1,
+        extra: typing.Mapping[str, object] | None = None,
+    ) -> None:
         """Log 'msg % args' with severity 'TRACE'.
 
         To pass exception information, use the keyword argument exc_info with a true value, e.g.
         logger.trace("Houston, we have a %s", "tiny detail.", exc_info=1)
         """
         if self.isEnabledFor(TRACE):
-            self._log(TRACE, msg, args, **kwargs)
+            self._log(
+                TRACE,
+                msg,
+                args,
+                exc_info=exc_info,
+                stack_info=stack_info,
+                stacklevel=stacklevel,
+                extra=extra,
+            )
 
 
 def initialise(level: int = INFO) -> None:

@@ -3,6 +3,7 @@
 """Functions to do with user authentication for all account types."""
 
 import asyncio
+import datetime
 import enum
 import re
 import typing
@@ -20,6 +21,7 @@ MIN_PASS_LEN = 8
 MAX_PASS_LEN = 32
 MIN_USER_LEN = 4
 MAX_USER_LEN = 32
+DELETION_GRACE_PERIOD_SECONDS = 24 * 3600
 
 USER_PATTERN = re.compile(r"[a-zA-Z0-9\-_]{4,32}")
 
@@ -160,6 +162,16 @@ async def create_user(
             return new_user
 
 
+def verify_password(*, duffelbag_user: database.DuffelbagUser, password: str) -> None:
+    """Verify whether the provided password matches that of the provided Duffelbag account."""
+    try:
+        _HASHER.verify(duffelbag_user.password, password)
+
+    except argon2.exceptions.VerifyMismatchError as exc:
+        msg = "The entered password is incorrect."
+        raise exceptions.DuffelbagLoginFailure(msg) from exc
+
+
 async def login_user(*, username: str, password: str) -> database.DuffelbagUser:
     """Log in to an existing Duffelbag user account and return it.
 
@@ -190,61 +202,142 @@ async def login_user(*, username: str, password: str) -> database.DuffelbagUser:
 
     # Due to the unique constraint on DuffelbagUser.username, it's safe to only
     # return the fist object.
-    user = await (
+    duffelbag_user = await (
         database.DuffelbagUser.objects()
         .where(database.DuffelbagUser.username == username)
         .first()
     )  # fmt: skip
 
-    if not user:
+    if not duffelbag_user:
         msg = f"No Duffelbag user named {username!r} exists."
-        raise exceptions.DuffelbagLoginFailure(msg, username=username)
+        raise exceptions.DuffelbagLoginFailure(msg)
 
-    try:
-        _HASHER.verify(user.password, password)
-
-    except argon2.exceptions.VerifyMismatchError as exc:
-        msg = f"The password entered for Duffelbag account {username!r} is incorrect."
-        raise exceptions.DuffelbagLoginFailure(msg, username=username) from exc
-
-    else:
-        return user
+    verify_password(duffelbag_user=duffelbag_user, password=password)
+    return duffelbag_user
 
 
-async def delete_user(*, username: str, password: str) -> None:
-    """Remove an existing Duffelbag account and all related user information.
+async def schedule_user_deletion(
+    duffelbag_user: database.DuffelbagUser, *, password: str
+) -> database.ScheduledUserDeletion:
+    """Schedule an existing Duffelbag account and all related user information for deletion.
+
+    The account will be deleted after a grace period.
 
     Parameters
     ----------
-    username:
-        The username of the Duffelbag account.
+    duffelbag_user:
+        The Duffelbag user that is to be marked for deletion.
     password:
-        The password of the Duffelbag account.
-
-    Raises
-    ------
-    :class:`exceptions.CredentialSizeViolation`
-        The provided username or password is too short or too long.
-    :class:`exceptions.CredentialCharacterViolation`
-        the provided username contains invalid characters.
-    :class:`exceptions.DuffelbagLoginFailure`
-        No Duffelbag user with the provided username exists or the provided
-        password was incorrect.
+        The password of the duffelbag user that is to be deleted.
     """
-    user = await login_user(username=username, password=password)
-    await user.remove()
+    verify_password(duffelbag_user=duffelbag_user, password=password)
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    deletion_ts = now + datetime.timedelta(seconds=DELETION_GRACE_PERIOD_SECONDS)
+
+    scheduled_deletion = database.ScheduledUserDeletion(
+        user=duffelbag_user.id,
+        deletion_ts=deletion_ts,
+    )
+    try:
+        await database.ScheduledUserDeletion.insert(scheduled_deletion)
+    except asyncpg.UniqueViolationError as exc:
+        await database.rollback_transaction()
+
+        existing_deletion = await (
+            database.ScheduledUserDeletion.objects()
+            .where(database.ScheduledUserDeletion.user == duffelbag_user.id)
+            .first()
+        )  # fmt: skip
+
+        assert existing_deletion
+
+        msg = (
+            f"Duffelbag user with id {duffelbag_user.id} attempted to delete"
+            " their account, but it is already scheduled for deletion at"
+            f"{existing_deletion.deletion_ts}."
+        )
+        raise exceptions.DuffelbagDeletionAlreadyQueued(
+            msg,
+            username=duffelbag_user.username,
+            deletion_ts=existing_deletion.deletion_ts,
+        ) from exc
+
+    return scheduled_deletion
 
 
-async def _recover_user_by_platform(
-    *, platform: Platform, platform_id: int
+async def get_scheduled_user_deletions() -> typing.Sequence[database.ScheduledUserDeletion]:
+    """Get all scheduled user deletions."""
+    return await database.ScheduledUserDeletion.objects()
+
+
+async def get_scheduled_user_deletion_user(
+    scheduled_user_deletion: database.ScheduledUserDeletion,
+) -> database.DuffelbagUser:
+    """Get the duffelbag user that is to be deleted."""
+    duffelbag_user = await (
+        database.DuffelbagUser.objects()
+        .where(database.DuffelbagUser.id == scheduled_user_deletion.user)
+        .first()
+    )
+
+    if not duffelbag_user:
+        msg = (
+            f"Duffelbag user with id {scheduled_user_deletion.user} is not"
+            " scheduled for deletion."
+        )
+        raise exceptions.DuffelbagDeletionNotQueued(msg)
+
+    return duffelbag_user
+
+
+@typing.overload
+async def get_user_by_platform(
+    *,
+    platform: Platform,
+    platform_id: int,
+    strict: typing.Literal[True],
+) -> database.DuffelbagUser:
+    ...
+
+
+@typing.overload
+async def get_user_by_platform(
+    *,
+    platform: Platform,
+    platform_id: int,
+    strict: bool = False,
 ) -> database.DuffelbagUser | None:
+    ...
+
+
+async def get_user_by_platform(
+    *,
+    platform: Platform,
+    platform_id: int,
+    strict: bool = False,
+) -> database.DuffelbagUser | None:
+    """Get the duffelbag user linked to a platform account."""
     joined = database.DuffelbagUser.id.join_on(database.PlatformUser.user)
 
-    return await (
+    duffelbag_user = await (
         database.DuffelbagUser.objects()
-        .where((joined.platform_id == platform_id) & (joined.platform_name == platform.name))
+        .where((joined.platform_id == platform_id) & (joined.platform_name == platform.value))
         .first()
     )  # fmt: skip
+
+    if strict and not duffelbag_user:
+        msg = (
+            f"Could not find a duffelbag account for {platform.value} user with"
+            f" id {platform_id}."
+        )
+        raise exceptions.DuffelbagConnectionNotFound(
+            msg,
+            platform_id=platform_id,
+            platform=platform.value,
+        )
+
+    return duffelbag_user
 
 
 async def recover_user(
@@ -282,13 +375,13 @@ async def recover_user(
     """
     _ensure_valid_pass(password)
 
-    duffelbag_user = await _recover_user_by_platform(platform=platform, platform_id=platform_id)
+    duffelbag_user = await get_user_by_platform(platform=platform, platform_id=platform_id)
     if not duffelbag_user:
         msg = (
             f"External platform account with id '{platform_id}' on platform"
-            f" {platform.name!r} is not bound to any Duffelbag account."
+            f" {platform.value!r} is not bound to any Duffelbag account."
         )
-        raise exceptions.PlatformLoginFailure(msg, platform=platform.name)
+        raise exceptions.PlatformLoginFailure(msg, platform=platform.value)
 
     # Update password.
     duffelbag_user.password = _HASHER.hash(password)
@@ -331,7 +424,7 @@ async def add_platform_account(
     platform_user = database.PlatformUser(
         user=duffelbag_user.id,
         platform_id=platform_id,
-        platform_name=platform.name,
+        platform_name=platform.value,
     )
 
     try:
@@ -343,12 +436,12 @@ async def add_platform_account(
         # The platform account already exists, check if it is bound to the
         # Duffelbag account that was provided.
 
-        existing_user = await _recover_user_by_platform(platform=platform, platform_id=platform_id)
+        existing_user = await get_user_by_platform(platform=platform, platform_id=platform_id)
         assert existing_user
 
         msg = (
             f"External platform account with id '{platform_id}' on platform"
-            f" {platform.name!r} is already registered to a Duffelbag account."
+            f" {platform.value!r} is already registered to a Duffelbag account."
         )
         raise exceptions.PlatformConnectionExists(
             msg,
@@ -387,7 +480,7 @@ async def remove_platform_account(
         .where(
             (database.PlatformUser.user == duffelbag_user.id)
             & (database.PlatformUser.platform_id == platform_id)
-            & (database.PlatformUser.platform_name == platform.name)
+            & (database.PlatformUser.platform_name == platform.value)
         )
         .returning(database.PlatformUser.id)
     )
@@ -397,7 +490,7 @@ async def remove_platform_account(
 
     msg = (
         f"No external platform account with id '{platform_id}' on platform"
-        f" {platform.name!r} is registered to the Duffelbag account with"
+        f" {platform.value!r} is registered to the Duffelbag account with"
         f" username {duffelbag_user.username!r} and ID '{duffelbag_user.id}'."
     )
     raise exceptions.PlatformConnectionNotFound(
@@ -408,7 +501,7 @@ async def remove_platform_account(
 
 
 async def list_connected_accounts(
-    duffelbag_user: database.DuffelbagUser,
+    duffelbag_user: database.DuffelbagUser, *, platform: Platform | None
 ) -> typing.Sequence[database.PlatformUser]:
     """Return all external platform accounts connected to the provided Duffelbag account.
 
@@ -417,6 +510,9 @@ async def list_connected_accounts(
     duffelbag_user:
         An existing Duffelbag account. This should be acquired using
         :func:`login_user`.
+    platform:
+        Only return connected accounts on a given platform. If not provided,
+        returns accounts for all platforms. Defaults to None.
 
     Returns
     -------
@@ -424,10 +520,11 @@ async def list_connected_accounts(
         All external platform accounts connected to the provided Duffelbag
         account.
     """
-    return await (
-        database.PlatformUser.objects()
-        .where(database.PlatformUser.user == duffelbag_user.id)
-    )  # fmt: skip
+    query = database.PlatformUser.objects().where(database.PlatformUser.user == duffelbag_user.id)
+    if platform:
+        query.where(database.PlatformUser.platform_name == platform.value)
+
+    return await query
 
 
 # database.ArknightsUser manipulation...

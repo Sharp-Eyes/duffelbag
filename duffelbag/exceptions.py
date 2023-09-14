@@ -1,5 +1,7 @@
 """Module containing exceptions raised by the Duffelbag bot."""
 
+import datetime
+
 import attrs
 
 
@@ -59,8 +61,30 @@ class DuffelbagUserExists(AuthException):
 class DuffelbagLoginFailure(AuthException):
     """Invalid credentials for a Duffelbag account were provided."""
 
+
+@attrs.define(auto_exc=True, slots=False, init=True)
+class DuffelbagDeletionAlreadyQueued(AuthException):
+    """A user tried to delete a Duffelbag account that is already scheduled for deletion."""
+
     username: str
     """The username of the Duffelbag account."""
+    deletion_ts: datetime.datetime
+    """The timestamp at which the Duffelbag account is to be deleted."""
+
+
+@attrs.define(auto_exc=True, slots=False, init=True)
+class DuffelbagDeletionNotQueued(AuthException):
+    """Tried to get a Duffelbag account that is not scheduled for deletion."""
+
+
+@attrs.define(auto_exc=True, slots=False, init=True)
+class DuffelbagConnectionNotFound(AuthException):
+    """Could not find a duffelbag account for a given platform account."""
+
+    platform_id: int
+    """The user id of the platform account."""
+    platform: str
+    """The name of the target platform."""
 
 
 @attrs.define(auto_exc=True, slots=False, init=True)
@@ -105,3 +129,11 @@ class ArknightsConnectionExists(AuthException):
     """The email address of the existing Arknights account."""
     is_own: bool
     """Whether the Arknights account is registered to the same Duffelbag account."""
+
+
+@attrs.define(auto_exc=True, slots=False, init=True)
+class InvalidEmail(AuthException):
+    """Attempted to bind an Arknights account with an invalid email address."""
+
+    email: str
+    """The invalid email address."""

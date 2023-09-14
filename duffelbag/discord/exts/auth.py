@@ -1,22 +1,30 @@
 """Bot plugin for Discord <-> Arknights user authentication."""
 
+import asyncio
+import datetime
+import re
 import typing
 
 import disnake
 from disnake.ext import commands, components, plugins
 from disnake.ext.components import interaction as interaction_
 
-from duffelbag import auth, exceptions, log
+import database
+from duffelbag import async_utils, auth, exceptions, log
 from duffelbag.discord import localisation
 
 _LOGGER = log.get_logger(__name__)
+_EMAIL_REGEX: typing.Final[typing.Pattern[str]] = re.compile(
+    # https://stackoverflow.com/a/201378
+    r"^(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|\"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*\")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9]))\.){3}(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9])|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])$"
+)
 
 # TODO: Expose a type like this in ext-components somewhere
 _MessageComponents = interaction_.Components[interaction_.MessageComponents]
 
 
 plugin = plugins.Plugin()
-external_manager = components.get_manager("duffelbag.restricted")
+restricted_manager = components.get_manager("duffelbag.restricted")
 
 
 @plugin.slash_command()
@@ -24,33 +32,9 @@ async def account(_: disnake.CommandInteraction) -> None:
     """Do stuff with accounts."""
 
 
-_PASS_PARAM = commands.Param(
-    min_length=auth.MIN_PASS_LEN,
-    max_length=auth.MAX_PASS_LEN,
-    description=(
-        f"The password to use. Must be between {auth.MIN_PASS_LEN} and"
-        f" {auth.MAX_PASS_LEN} characters long."
-    ),
-)
-
-
-@account.sub_command(name="recover")  # pyright: ignore[reportUnknownMemberType]
-async def recover_account(inter: disnake.CommandInteraction, password: str = _PASS_PARAM) -> None:
-    """Recover the Duffelbag account connected to your discord account by setting a new password."""
-    duffelbag_user = await auth.recover_user(
-        platform=auth.Platform.DISCORD,
-        platform_id=inter.author.id,
-        password=password,
-    )
-
-    await inter.response.send_message(
-        localisation.localise(
-            "auth_recover",
-            inter.locale,
-            format_map={"username": duffelbag_user.username, "password": password},
-        ),
-        ephemeral=True,
-    )
+@account.sub_command_group(name="duffelbag")  # pyright: ignore[reportUnknownMemberType]
+async def account_duffelbag(_: disnake.CommandInteraction) -> None:
+    """Do stuff with Duffelbag accounts."""
 
 
 _USER_PARAM = commands.Param(
@@ -63,8 +47,18 @@ _USER_PARAM = commands.Param(
 )
 
 
-@account.sub_command(name="create")  # pyright: ignore[reportUnknownMemberType]
-async def account_create(
+_PASS_PARAM = commands.Param(
+    min_length=auth.MIN_PASS_LEN,
+    max_length=auth.MAX_PASS_LEN,
+    description=(
+        f"The password to use. Must be between {auth.MIN_PASS_LEN} and"
+        f" {auth.MAX_PASS_LEN} characters long."
+    ),
+)
+
+
+@account_duffelbag.sub_command(name="create")  # pyright: ignore[reportUnknownMemberType]
+async def account_duffelbag_create(
     inter: disnake.CommandInteraction,
     username: str = _USER_PARAM,
     password: str = _PASS_PARAM,
@@ -85,10 +79,58 @@ async def account_create(
             inter.locale,
             format_map={"username": username},
         ),
-        components=external_manager.make_button(
-            "ExpBut",
+        components=restricted_manager.make_button(
+            "ExpBtn",
             key_base="auth_new",
             params=[username, auth.Platform.DISCORD.value],
+        ),
+        ephemeral=True,
+    )
+
+
+@account_duffelbag.sub_command(name="recover")  # pyright: ignore[reportUnknownMemberType]
+async def account_duffelbag_recover(
+    inter: disnake.CommandInteraction, password: str = _PASS_PARAM
+) -> None:
+    """Recover the Duffelbag account connected to your discord account by setting a new password."""
+    duffelbag_user = await auth.recover_user(
+        platform=auth.Platform.DISCORD,
+        platform_id=inter.author.id,
+        password=password,
+    )
+
+    await inter.response.send_message(
+        localisation.localise(
+            "auth_recover",
+            inter.locale,
+            format_map={"username": duffelbag_user.username, "password": password},
+        ),
+        ephemeral=True,
+    )
+
+
+@account_duffelbag.sub_command(name="delete")  # pyright: ignore[reportUnknownMemberType]
+async def account_duffelbag_delete(
+    inter: disnake.CommandInteraction,
+    password: str = _PASS_PARAM,
+) -> None:
+    """Delete your duffelbag account. This has a 24 hour grace period."""
+    duffelbag_user = await auth.get_user_by_platform(
+        platform=auth.Platform.DISCORD,
+        platform_id=inter.author.id,
+        strict=True,
+    )
+
+    scheduled_deletion = await auth.schedule_user_deletion(duffelbag_user, password=password)
+    schedule_user_deletion(scheduled_deletion)
+
+    await inter.response.send_message(
+        localisation.localise(
+            "auth_delete_schedule",
+            inter.locale,
+            format_map={
+                "timestamp": disnake.utils.format_dt(scheduled_deletion.deletion_ts, style="R")
+            },
         ),
         ephemeral=True,
     )
@@ -116,7 +158,7 @@ async def account_bind_platform(
 
     await inter.response.send_message(
         localisation.localise(
-            "auth_bind",
+            "auth_bind_platform",
             locale=inter.locale,
             format_map={
                 "platform": auth.Platform.DISCORD.value,
@@ -159,7 +201,7 @@ async def account_error_handler(
         case exceptions.DuffelbagUserExists(username=username):
             key = "exc_auth_dfb_exists_collapsed"
             msg_components.append(
-                external_manager.make_button(
+                restricted_manager.make_button(
                     "ExpBut",
                     key_base="exc_auth_dfb_exists",
                     params=[username],
@@ -194,6 +236,47 @@ async def account_error_handler(
 
     _LOGGER.trace("Exception handled successfully in local error handler.")
     return True
+
+
+async def _delayed_user_deletion(scheduled_deletion: database.ScheduledUserDeletion) -> None:
+    timedelta = scheduled_deletion.deletion_ts - datetime.datetime.now(tz=datetime.UTC)
+    await asyncio.sleep(timedelta.total_seconds())
+
+    duffelbag_user = await auth.get_scheduled_user_deletion_user(scheduled_deletion)
+    accounts = await auth.list_connected_accounts(duffelbag_user, platform=auth.Platform.DISCORD)
+
+    for account in accounts:
+        try:
+            user = await plugin.bot.get_or_fetch_user(account.platform_id, strict=True)
+            await user.send(
+                localisation.localise(
+                    "auth_delete_success",
+                    disnake.Locale.en_GB,  # TODO: figure out some way of getting locale information
+                    format_map={"username": duffelbag_user.username},
+                )
+            )
+
+        except disnake.HTTPException:
+            _LOGGER.warning(
+                "Failed to notify discord user with id %i of their Duffelbag account deletion.",
+                account.platform_id,
+            )
+
+    await duffelbag_user.remove()
+
+
+def schedule_user_deletion(scheduled_deletion: database.ScheduledUserDeletion) -> None:
+    """Piss."""
+    async_utils.safe_task(_delayed_user_deletion(scheduled_deletion))
+
+
+@plugin.load_hook()
+async def schedule_user_deletions() -> None:
+    """Get scheduled user deletions and create tasks for them."""
+    scheduled_deletions = await auth.get_scheduled_user_deletions()
+
+    for scheduled_deletion in scheduled_deletions:
+        schedule_user_deletion(scheduled_deletion)
 
 
 setup, teardown = plugin.create_extension_handlers()

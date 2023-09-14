@@ -4,6 +4,20 @@ import asyncio
 import contextlib
 import typing
 
+_tasks: set[asyncio.Task[typing.Any]] = set()
+
+
+def safe_task(
+    coroutine: typing.Coroutine[typing.Any, typing.Any, typing.Any]
+) -> asyncio.Task[typing.Any]:
+    """Create an asyncio background task without risk of it being GC'd."""
+    task = asyncio.create_task(coroutine)
+
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
+
+    return task
+
 
 async def cancel_futures(futures: typing.Iterable[asyncio.Future[typing.Any]]) -> None:
     """Ensure all provided futures are cancelled."""

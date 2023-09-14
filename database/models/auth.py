@@ -46,3 +46,17 @@ class ArknightsUser(table.Table):
     # NOTE: As of migration 2023-05-31T10:47:00:954167, there is a composite
     #       unique constraint on (channel_uid, yostar_token) with name
     #       "arknights_user_channel_uid_yostar_token_key".
+
+
+class ScheduledUserDeletion(table.Table):
+    """The database representation of a scheduled user deletion.
+
+    If a user no longer shares any guilds with the bot or requests that their
+    account be deleted, deletion will be scheduled in the near future.
+
+    This is a one (DuffelbagUser) to one (ScheduledUserDeletion) relation.
+    """
+
+    id: columns.Serial
+    user = columns.ForeignKey(DuffelbagUser, unique=True)
+    deletion_ts = columns.Timestamptz()

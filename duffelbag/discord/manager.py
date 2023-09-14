@@ -6,18 +6,15 @@ import disnake
 from disnake.ext import components
 
 from duffelbag import log
+from duffelbag.discord import localisation
 
 _LOGGER = log.get_logger(__name__)
 
 
-root_manager = components.get_manager()
-
-
-@root_manager.as_callback_wrapper
 async def log_callback_result(
     manager: components.ComponentManager,
     component: components.api.RichComponent,
-    _: disnake.Interaction,
+    _inter: disnake.Interaction,
 ) -> typing.AsyncGenerator[None, None]:
     """Log the callback result for *all* component interactions."""
     try:
@@ -47,10 +44,25 @@ async def log_callback_result(
         )
 
 
-restricted_manager = components.get_manager("duffelbag.restricted")
+async def handle_component_exception(
+    _manager: components.ComponentManager,
+    _component: components.api.RichComponent,
+    inter: disnake.Interaction,
+    _exception: Exception,
+) -> bool:
+    """Handle component exceptions by notifying the user and logging them."""
+    await inter.response.send_message(
+        localisation.localise(
+            "general_component_error",
+            inter.locale,
+        ),
+        ephemeral=True,
+    )
+
+    # Let the default manager implementation log the exception.
+    return False
 
 
-@restricted_manager.as_callback_wrapper
 async def component_perms(
     manager: components.ComponentManager,
     component: components.api.RichComponent,
@@ -93,3 +105,15 @@ async def component_perms(
 
     _LOGGER.trace("Permissions check succeeded.")
     yield
+
+
+def initialise() -> None:
+    """Initialise component managers."""
+    duffelbag_manager = components.get_manager("duffelbag")
+    duffelbag_manager.as_callback_wrapper(log_callback_result)
+    duffelbag_manager.as_exception_handler(handle_component_exception)
+
+    restricted_manager = components.get_manager("duffelbag.restricted")
+    restricted_manager.as_callback_wrapper(component_perms)
+
+    _LOGGER.trace("Successfully initialised component managers.")

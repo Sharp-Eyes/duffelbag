@@ -10,7 +10,7 @@ import uvloop
 from disnake.ext import commands, components
 
 from duffelbag import log
-from duffelbag.discord import bot, config, exts, localisation
+from duffelbag.discord import bot, config, exts, localisation, manager
 
 # Extensions.
 
@@ -45,11 +45,14 @@ async def _main() -> None:
         sync_commands_debug=not config.BOT_CONFIG.DISCORD_IS_PROD,
     )
 
-    manager = components.get_manager()
-    manager.add_to_bot(duffelbag)
+    root_manager = components.get_manager()
+    root_manager.add_to_bot(duffelbag)
 
-    localisation.initialise(duffelbag)
     log.initialise()
+    localisation.initialise(duffelbag)
+    manager.initialise()
+
+    assert components.check_manager("duffelbag")
 
     for ext in _discover_exts():
         duffelbag.load_extension(ext)

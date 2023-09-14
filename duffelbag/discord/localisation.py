@@ -13,12 +13,6 @@ _LOGGER = log.get_logger(__name__)
 _COMMAND_MENTION_LOCALISATIONS: dict[str, dict[str, str]] = {}
 
 
-def initialise(bot: commands.InteractionBot) -> None:
-    """Initialise slash command mentions."""
-    _LOGGER.trace("Registering command mention generator callback.")
-    bot.add_listener(repopulate_command_mentions, "on_command_sync")
-
-
 def _walk_top_level_slash(
     command: commands.InvokableSlashCommand,
 ) -> typing.Generator[commands.InvokableSlashCommand | commands.SubCommand, None, None]:
@@ -111,3 +105,10 @@ def localise(
         strict=strict,
         format_map=format_map,
     )
+
+
+def initialise(bot: commands.InteractionBot) -> None:
+    """Initialise slash command mentions."""
+    bot.add_listener(repopulate_command_mentions, "on_command_sync")
+
+    _LOGGER.trace("Succesfully initialised localisations.")

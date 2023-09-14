@@ -29,7 +29,7 @@ class RawSkillLevel(pydantic.BaseModel):
     duration: float
     sp_data: RawSpData = pydantic.Field(alias="spData")
 
-    @pydantic.root_validator(pre=True)
+    @pydantic.model_validator(mode="before")  # pyright: ignore
     def parse_description(cls, values: dict[str, object]) -> dict[str, object]:
         description = typing.cast(str, values["description"])
         blackboard = typing.cast(list[dict[str, object]], values["blackboard"])
@@ -38,9 +38,7 @@ class RawSkillLevel(pydantic.BaseModel):
         # [{"id": "a", value: 1}, {"id": "b", value: 2}]
         # to
         # {"a": 1, "b": 2}
-        blackboard_map: dict[str, object] = dict(
-            map(dict.values, blackboard)  # pyright: ignore  # noqa: PGH003
-        )
+        blackboard_map: dict[str, object] = dict(map(dict.values, blackboard))  # pyright: ignore
 
         # Replace colour tags by something we can actually use.
         # Sadly discord doesn't support coloured text, so we settle for bold.

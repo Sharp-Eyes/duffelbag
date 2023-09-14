@@ -17,7 +17,7 @@ class RawItem(pydantic.BaseModel):
     rarity: int
     icon_id: str = pydantic.Field(alias="iconId")
 
-    @pydantic.validator("description")
+    @pydantic.field_validator("description")
     def parse_description(cls, value: str | None) -> str | None:
         """Get rid of <...> </> tags."""
         return re.sub(r"<.*?>(.*?)</>", r"**\1**", value) if value else None

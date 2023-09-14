@@ -40,7 +40,7 @@ class _YostarAuthenticator:
     email: str | None
 
     def __init__(self, *, client: arkprts.Client | None = None) -> None:
-        self.client = client if client else arkprts.Client(pure=True)
+        self.client = client if client else arkprts.Client(assets=False)
         self.email = None
 
     async def login_with_email(self, email: str, /) -> None:
@@ -48,17 +48,22 @@ class _YostarAuthenticator:
             msg = "An email has already been sent."
             raise RuntimeError(msg)
 
-        await self.client._request_yostar_auth(email)
+        await self.client.auth._request_yostar_auth(email)  # pyright: ignore
 
         self.email = email
 
     async def complete_login(self, verification_code: str) -> tuple[str, str]:
+        uid: str
+        token: str
+
         if not self.email:
             msg = "A verification email must be sent first."
             raise RuntimeError(msg)
 
-        uid, token = await self.client._submit_yostar_auth(self.email, verification_code)
-        return await self.client._get_yostar_token(self.email, uid, token)
+        uid, token = await self.client.auth._submit_yostar_auth(  # pyright: ignore
+            self.email, verification_code
+        )
+        return await self.client.auth._get_yostar_token(self.email, uid, token)  # pyright: ignore
 
 
 # NOTE:

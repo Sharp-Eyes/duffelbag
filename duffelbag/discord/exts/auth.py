@@ -190,7 +190,8 @@ async def account_bind_arknights(
     await auth.start_authentication(duffelbag_user, email=email)
 
     button = ArknightsBindButton(
-        label=localisation.localise("auth_bind_arknights_title", locale=inter.locale)
+        label=localisation.localise("auth_bind_arknights_title", locale=inter.locale),
+        email=email,
     )
 
     wrapped = components.wrap_interaction(inter)
@@ -205,12 +206,14 @@ async def account_bind_arknights(
     )
 
 
-@restricted_manager.register
+@restricted_manager.register(identifier="ArkBind")
 class ArknightsBindButton(components.RichButton):
     """Button to complete the Arknights account verification process."""
 
     label: str
     style: disnake.ButtonStyle = disnake.ButtonStyle.success
+
+    email: str
 
     async def callback(self, inter: components.MessageInteraction) -> None:
         """Verify and link an Arknights account to a Duffelbag account."""
@@ -252,14 +255,18 @@ class ArknightsBindButton(components.RichButton):
             strict=True,
         )
 
-        await auth.complete_authentication(duffelbag_user, verification_code=verification_code)
+        await auth.complete_authentication(
+            duffelbag_user,
+            email=self.email,
+            verification_code=verification_code,
+        )
 
         await modal_inter.edit_original_response(
             localisation.localise("auth_bind_arknights_success", locale=inter.locale)
         )
 
 
-@account.error  # pyright: ignore  # noqa: PGH003
+@account.error  # pyright: ignore
 async def account_error_handler(
     inter: disnake.Interaction,
     exception: commands.CommandInvokeError,
@@ -284,9 +291,6 @@ async def account_error_handler(
 
         case exceptions.CredentialCharacterViolation():
             key = "exc_auth_credchar"
-
-        case exceptions.AuthStateError(in_progress=in_progress):
-            key = "exc_auth_inprog" if in_progress else "exc_auth_noprog"
 
         case exceptions.DuffelbagUserExists(username=username):
             key = "exc_auth_dfb_exists_collapsed"

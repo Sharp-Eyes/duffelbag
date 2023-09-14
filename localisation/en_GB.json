@@ -14,8 +14,6 @@
 
     "exc_auth_credsize": "The provided {credential} is of invalid length: {credential}s must be between {min} and {max} characters long.",
     "exc_auth_credchar": "The provided {credential} contains invalid characters.\nPlease ensure you only use '{allowed_chars}'.",
-    "exc_auth_inprog": "This Arknights account is already undergoing a verification progress.\nPlease try again later.",
-    "exc_auth_noprog": "This Arknights account is not yet undergoing a verification progress.\nIf this is unexpected, it may be the case that your authentication attempt took too long.\nPlease try authenticating again.",
     "exc_auth_dfb_exists_collapsed": "You appear to already have an existing Duffelbag account.",
     "exc_auth_dfb_exists_expanded": "You appear to already have an existing Duffelbag account.\nYour existing account is named **{username}**.\nIf you can't remember your account password, you can reset it using {cmd$account_duffelbag_recover}.",
     "exc_auth_dfb_loginfail": "No Duffelbag user with username {username} exists, or the provided password was incorrect.\nPlease validate you entered everything correctly.\nNote that both username and password are case-sensitive.",

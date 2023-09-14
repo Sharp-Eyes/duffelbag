@@ -40,16 +40,6 @@ class CredentialCharacterViolation(DuffelbagException):
 
 
 @attrs.define(auto_exc=True, slots=False, init=True)
-class AuthStateError(AuthException):
-    """A user tried to authenticate multiple Arknights accounts simultaneously."""
-
-    username: str
-    """The username of the Duffelbag account."""
-    in_progress: bool
-    """Whether the authentication was already in progress or not."""
-
-
-@attrs.define(auto_exc=True, slots=False, init=True)
 class DuffelbagUserExists(AuthException):
     """A new user could not be created because it conflicts with an existing one."""
 

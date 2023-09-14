@@ -2,7 +2,6 @@
 
 """Functions to do with user authentication for all account types."""
 
-import asyncio
 import datetime
 import enum
 import re
@@ -16,6 +15,7 @@ import database
 from duffelbag import exceptions
 
 # Ensure passwords are hashed at the correct length. Should be 32 chars.
+_AUTH = arkprts.YostarAuth()
 _HASHER = argon2.PasswordHasher(hash_len=32)
 MIN_PASS_LEN = 8
 MAX_PASS_LEN = 32
@@ -31,55 +31,6 @@ class Platform(enum.Enum):
 
     DISCORD = "Discord"
     ELUDRIS = "Eludris"
-
-
-class _YostarAuthenticator:
-    __slots__: typing.Sequence[str] = ("client", "email")
-
-    client: arkprts.Client
-    email: str | None
-
-    def __init__(self, *, client: arkprts.Client | None = None) -> None:
-        self.client = client if client else arkprts.Client(assets=False)
-        self.email = None
-
-    async def login_with_email(self, email: str, /) -> None:
-        if self.email:
-            msg = "An email has already been sent."
-            raise RuntimeError(msg)
-
-        await self.client.auth._request_yostar_auth(email)  # pyright: ignore
-
-        self.email = email
-
-    async def complete_login(self, verification_code: str) -> tuple[str, str]:
-        uid: str
-        token: str
-
-        if not self.email:
-            msg = "A verification email must be sent first."
-            raise RuntimeError(msg)
-
-        uid, token = await self.client.auth._submit_yostar_auth(  # pyright: ignore
-            self.email, verification_code
-        )
-        return await self.client.auth._get_yostar_token(self.email, uid, token)  # pyright: ignore
-
-
-# NOTE:
-# - Key: DuffelbagUser.id
-# - Value: (_YostarAuthenticator, authentication timeout task)
-_active_authenticators: dict[int, tuple[_YostarAuthenticator, asyncio.Task[None]]] = {}
-
-
-async def _timeout(key: int, delay: float) -> None:
-    await asyncio.sleep(delay)
-    _active_authenticators.pop(key)
-
-
-def _start_timeout(key: int, delay: float = 300.0) -> tuple[float, asyncio.Task[None]]:
-    timeout_task = asyncio.create_task(_timeout(key, delay))
-    return (delay, timeout_task)
 
 
 # database.DuffelbagUser manipulation...
@@ -545,9 +496,7 @@ async def _recover_user_by_email(*, email: str) -> database.DuffelbagUser | None
     )  # fmt: skip
 
 
-async def start_authentication(
-    duffelbag_user: database.DuffelbagUser, *, email: str
-) -> tuple[float, asyncio.Task[None]]:
+async def start_authentication(duffelbag_user: database.DuffelbagUser, *, email: str) -> None:
     """Start the authentication process to register a new Arknights account to a Duffelbag account.
 
     As a result of running this function, a verification email will be sent to
@@ -573,8 +522,6 @@ async def start_authentication(
     ------
     :class:`exceptions.ArknightsConnectionExists`
         The Arknights account is already registered to a Duffelbag account.
-    :class:`exceptions.AuthStateError`:
-        The user already has an ongoing authentication process.
     """
     existing_user = await _recover_user_by_email(email=email)
     if existing_user:
@@ -590,22 +537,14 @@ async def start_authentication(
             is_own=existing_user.id == duffelbag_user.id,
         )
 
-    if duffelbag_user.id in _active_authenticators:
-        msg = f"Duffelbag user {duffelbag_user.username!r} is already undergoing authentication."
-        raise exceptions.AuthStateError(msg, username=duffelbag_user.username, in_progress=True)
-
-    authenticator = _YostarAuthenticator()
-    await authenticator.login_with_email(email)
-
-    delay, timeout_task = _start_timeout(duffelbag_user.id)
-    _active_authenticators[duffelbag_user.id] = (authenticator, timeout_task)
-
-    return delay, timeout_task
+    # This sends the authentication email to the user.
+    await _AUTH.get_token_from_email_code(email)
 
 
 async def complete_authentication(
     duffelbag_user: database.DuffelbagUser,
     *,
+    email: str,
     verification_code: str,
 ) -> database.ArknightsUser:
     """Complete the authentication process started by :func:`start_authentication`.
@@ -617,40 +556,21 @@ async def complete_authentication(
     ----------
     duffelbag_user:
         The duffelbag account to which to register the Arknights account.
+    email:
+        The email of the user that is to be authenticated.
     verification_code:
         The verification code that was emailed to the email address that was
         provided to :func:`start_authentication`.
 
     Raises
     ------
-    :class:`exceptions.AuthStateError`:
-        The provided Duffelbag account is not currently undergoing an
-        authentication process.
     :class:`exceptions.ArknightsConnectionExists`
         The Arknights account is already registered to a Duffelbag account.
     """
-    if duffelbag_user.id not in _active_authenticators:
-        msg = (
-            f"Duffelbag user {duffelbag_user.username!r} is not in an active"
-            " authentication process."
-        )
-        raise exceptions.AuthStateError(msg, username=duffelbag_user.username, in_progress=False)
+    # This finalises the authentication process.
+    uid, token = await _AUTH.get_token_from_email_code(email, verification_code)
 
-    authenticator, timeout_task = _active_authenticators.pop(duffelbag_user.id)
-
-    if not timeout_task.done() and not timeout_task.cancelled():
-        timeout_task.cancel()
-
-    uid, token = await authenticator.complete_login(verification_code)
-
-    assert authenticator.email  # This **must** be set for complete_login to work.
-
-    return await add_arknights_account(
-        duffelbag_user,
-        uid=uid,
-        token=token,
-        email=authenticator.email,
-    )
+    return await add_arknights_account(duffelbag_user, uid=uid, token=token, email=email)
 
 
 async def add_arknights_account(

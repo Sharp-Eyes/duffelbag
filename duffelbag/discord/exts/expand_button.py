@@ -28,7 +28,7 @@ plugin = plugins.Plugin()
 manager = components.get_manager("duffelbag.restricted")
 
 
-class _StringListParser(components.Parser[list[str]]):
+class _StringListParser(components.parser.Parser[list[str]]):
     # TODO: Implement list support into ext-components :trol:
 
     def loads(self, _: disnake.Interaction, arg: str) -> list[str]:
@@ -56,7 +56,7 @@ class _PosToFormatMap(dict[str, object]):
         return value
 
 
-@manager.register(identifier="ExpBut")
+@manager.register(identifier="ExpBtn")
 class ExpandButton(components.RichButton):
     """A button that toggles a message between expanded and collapsed state."""
 

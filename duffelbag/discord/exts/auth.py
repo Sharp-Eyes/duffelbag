@@ -169,6 +169,96 @@ async def account_bind_platform(
     )
 
 
+@account_bind.sub_command(name="arknights")  # pyright: ignore[reportUnknownMemberType]
+async def account_bind_arknights(
+    inter: disnake.CommandInteraction,
+    email: str,
+) -> None:
+    """Bind an Arknights account to your Duffelbag account."""
+    await inter.response.defer(ephemeral=True)
+
+    if not _EMAIL_REGEX.fullmatch(email):
+        msg = f"The provided email address {email!r} is not a valid email address."
+        raise exceptions.InvalidEmail(msg, email=email)
+
+    duffelbag_user = await auth.get_user_by_platform(
+        platform=auth.Platform.DISCORD,
+        platform_id=inter.author.id,
+        strict=True,
+    )
+
+    await auth.start_authentication(duffelbag_user, email=email)
+
+    button = ArknightsBindButton(
+        label=localisation.localise("auth_bind_arknights_title", locale=inter.locale)
+    )
+
+    wrapped = components.wrap_interaction(inter)
+
+    await wrapped.edit_original_message(
+        localisation.localise(
+            "auth_bind_arknights",
+            locale=inter.locale,
+            format_map={"email": email},
+        ),
+        components=[button],
+    )
+
+
+@restricted_manager.register
+class ArknightsBindButton(components.RichButton):
+    """Button to complete the Arknights account verification process."""
+
+    label: str
+    style: disnake.ButtonStyle = disnake.ButtonStyle.success
+
+    async def callback(self, inter: components.MessageInteraction) -> None:
+        """Verify and link an Arknights account to a Duffelbag account."""
+        custom_id = f"arknights_verify|{inter.id}"
+        text_input = disnake.ui.TextInput(
+            label=localisation.localise("auth_bind_arknights_modal_label", inter.locale),
+            custom_id="verification_code",
+            min_length=6,
+            max_length=6,
+            placeholder="XXXXXX",
+        )
+        await inter.response.send_modal(
+            title=self.label,
+            custom_id=custom_id,
+            components=[text_input],
+        )
+
+        try:
+            modal_inter: disnake.ModalInteraction = await inter.bot.wait_for(
+                disnake.Event.modal_submit,
+                check=lambda modal_inter: modal_inter.custom_id == custom_id,
+                timeout=60,
+            )
+        except asyncio.TimeoutError:
+            # TODO: Localise.
+            await inter.followup.send("Timed out...", ephemeral=True)
+            return
+
+        await modal_inter.response.defer(ephemeral=True)
+
+        verification_code = modal_inter.text_values[text_input.custom_id]
+        if not verification_code.isdigit():
+            await modal_inter.edit_original_response("Fuck you that's not a digit.")
+            return
+
+        duffelbag_user = await auth.get_user_by_platform(
+            platform=auth.Platform.DISCORD,
+            platform_id=inter.author.id,
+            strict=True,
+        )
+
+        await auth.complete_authentication(duffelbag_user, verification_code=verification_code)
+
+        await modal_inter.edit_original_response(
+            localisation.localise("auth_bind_arknights_success", locale=inter.locale)
+        )
+
+
 @account.error  # pyright: ignore  # noqa: PGH003
 async def account_error_handler(
     inter: disnake.Interaction,

@@ -6,6 +6,11 @@
     "auth_new_expanded": "## Account successfully created!\nYour shiny new Duffelbag account with name **{username}** has been created.\n\nAny commands run on this {platform} account will automatically use this Duffelbag account.\nYou can register other {platform} accounts to this Duffelbag account using {cmd$account_bind_platform}.\nYou'll need to remember your username and password to do this.\nIf you ever forget them, you can reset your password using {cmd$account_duffelbag_recover}.",
     "auth_delete_schedule": "## Account successfully scheduled for deletion!\nYour Duffelbag account has successfully been scheduled for deletion **{timestamp}**. In case you wish to undo this, please use [TO BE IMPLEMENTED].",
     "auth_delete_success": "## Account successfully deleted!\nYour duffelbag account named **{username}** has been deleted, along with any linked platform and Arknights accounts.",
+    "auth_bind_platform": "## Account successfully bound!\nYour {platform} account has successfully been bound to the Duffelbag account with username **{username}**.",
+    "auth_bind_arknights": "## Verification request sent!\nPlease check your email (**{email}**) for a verification mail from Yostar (**info@mail.yo-star.com**). This mail should contain a six-digit verification code.\nTo complete the verification progress, click the button below and enter the verification code in the popup window.\nDoing so will bind your Arknights account to your Duffelbag account, allowing you to automatically access (read-only) your Arknights inventory data from inside Discord!",
+    "auth_bind_arknights_title": "Complete Verification",
+    "auth_bind_arknights_modal_label": "Verfication Code",
+    "auth_bind_arknights_success": "## Successfully bound your Arknights account!\nYour arknights account has been successfully bound to your Duffelbag account.",
 
     "exc_auth_credsize": "The provided {credential} is of invalid length: {credential}s must be between {min} and {max} characters long.",
     "exc_auth_credchar": "The provided {credential} contains invalid characters.\nPlease ensure you only use '{allowed_chars}'.",

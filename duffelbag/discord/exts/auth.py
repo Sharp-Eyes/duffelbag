@@ -16,7 +16,7 @@ from duffelbag.discord import localisation
 _LOGGER = log.get_logger(__name__)
 _EMAIL_REGEX: typing.Final[typing.Pattern[str]] = re.compile(
     # https://stackoverflow.com/a/201378
-    r"^(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|\"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*\")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9]))\.){3}(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9])|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])$"
+    r"^(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|\"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*\")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9]))\.){3}(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9])|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])$",
 )
 
 # TODO: Expose a type like this in ext-components somewhere
@@ -90,7 +90,8 @@ async def account_duffelbag_create(
 
 @account_duffelbag.sub_command(name="recover")  # pyright: ignore[reportUnknownMemberType]
 async def account_duffelbag_recover(
-    inter: disnake.CommandInteraction, password: str = _PASS_PARAM
+    inter: disnake.CommandInteraction,
+    password: str = _PASS_PARAM,
 ) -> None:
     """Recover the Duffelbag account connected to your discord account by setting a new password."""
     duffelbag_user = await auth.recover_user(
@@ -129,7 +130,7 @@ async def account_duffelbag_delete(
             "auth_delete_schedule",
             inter.locale,
             format_map={
-                "timestamp": disnake.utils.format_dt(scheduled_deletion.deletion_ts, style="R")
+                "timestamp": disnake.utils.format_dt(scheduled_deletion.deletion_ts, style="R"),
             },
         ),
         ephemeral=True,
@@ -179,7 +180,7 @@ async def account_bind_arknights(
 
     if not _EMAIL_REGEX.fullmatch(email):
         msg = f"The provided email address {email!r} is not a valid email address."
-        raise exceptions.InvalidEmail(msg, email=email)
+        raise exceptions.InvalidEmailError(msg, email=email)
 
     duffelbag_user = await auth.get_user_by_platform(
         platform=auth.Platform.DISCORD,
@@ -262,7 +263,7 @@ class ArknightsBindButton(components.RichButton):
         )
 
         await modal_inter.edit_original_response(
-            localisation.localise("auth_bind_arknights_success", locale=inter.locale)
+            localisation.localise("auth_bind_arknights_success", locale=inter.locale),
         )
 
 
@@ -286,33 +287,33 @@ async def account_error_handler(
     msg_components: _MessageComponents = []
 
     match exception:
-        case exceptions.CredentialSizeViolation():
+        case exceptions.CredentialSizeViolationError():
             key = "exc_auth_credsize"
 
-        case exceptions.CredentialCharacterViolation():
+        case exceptions.CredentialCharacterViolationError():
             key = "exc_auth_credchar"
 
-        case exceptions.DuffelbagUserExists(username=username):
+        case exceptions.DuffelbagUserExistsError(username=username):
             key = "exc_auth_dfb_exists_collapsed"
             msg_components.append(
                 restricted_manager.make_button(
                     "ExpBut",
                     key_base="exc_auth_dfb_exists",
                     params=[username],
-                )
+                ),
             )
 
-        case exceptions.DuffelbagLoginFailure():
+        case exceptions.DuffelbagLoginError():
             key = "exc_auth_dfb_loginfail"
 
-        case exceptions.PlatformLoginFailure():
+        case exceptions.PlatformLoginError():
             key = "exc_auth_pf_loginfail"
 
-        case exceptions.PlatformConnectionExists(is_own=is_own):
+        case exceptions.PlatformConnectionExistsError(is_own=is_own):
             key = "exc_auth_pf_exists_self" if is_own else "exc_auth_pf_exists"
             params["platform"] = auth.Platform.DISCORD.value
 
-        case exceptions.ArknightsConnectionExists(is_own=is_own):
+        case exceptions.ArknightsConnectionExistsError(is_own=is_own):
             key = "exc_auth_ak_exists_self" if is_own else "exc_auth_ak_exists"
 
         case _:
@@ -347,7 +348,7 @@ async def _delayed_user_deletion(scheduled_deletion: database.ScheduledUserDelet
                     "auth_delete_success",
                     disnake.Locale.en_GB,  # TODO: figure out some way of getting locale information
                     format_map={"username": duffelbag_user.username},
-                )
+                ),
             )
 
         except disnake.HTTPException:

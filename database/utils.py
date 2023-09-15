@@ -17,7 +17,8 @@ class _MetaTable(table.Table):
 def get_db() -> engine.PostgresEngine:
     """Get the database from any piccolo table."""
     return typing.cast(
-        engine.PostgresEngine, _MetaTable._meta.db  # pyright: ignore[reportUnknownMemberType]
+        engine.PostgresEngine,
+        _MetaTable._meta.db,  # pyright: ignore  # noqa: SLF001
     )
 
 

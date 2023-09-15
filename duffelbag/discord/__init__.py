@@ -1,1 +1,1 @@
-"""The Duffelbag discord bot implementation."""
+"""The Duffelbag Discord bot implementation."""

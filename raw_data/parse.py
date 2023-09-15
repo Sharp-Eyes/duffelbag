@@ -57,8 +57,8 @@ async def fetch_characters(
 
     return [
         models.RawCharacter(**character)
-        for id, character in data.items()
-        if id.startswith("char") and not character["isNotObtainable"]
+        for id_, character in data.items()
+        if id_.startswith("char") and not character["isNotObtainable"]
     ]
 
 
@@ -87,8 +87,8 @@ async def fetch_skills(
 
     return [
         models.RawSkill(**skill)
-        for id, skill in data.items()
-        if id.startswith(("skchr", "skcom"))
+        for id_, skill in data.items()
+        if id_.startswith(("skchr", "skcom"))
     ]  # fmt: skip
 
 

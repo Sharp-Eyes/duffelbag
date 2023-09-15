@@ -71,7 +71,7 @@ async def populate_items(
                 rarity=item.rarity,
             )
             for item in raw_items
-        ]
+        ],
     ).on_conflict(
         action="DO UPDATE",
         target=database.Item.id,
@@ -79,7 +79,10 @@ async def populate_items(
     )
 
 
-async def populate_characters(
+# TODO: Maybe break this up into separate functions
+
+
+async def populate_characters(  # noqa: C901
     raw_characters: typing.Sequence[raw_data.RawCharacter] | None = None,
     *,
     clean: bool = False,
@@ -123,7 +126,7 @@ async def populate_characters(
                     profession=character.profession,
                     sub_profession=character.sub_profession,
                     is_alter=character.is_alter,
-                )
+                ),
             ).on_conflict(
                 action="DO UPDATE",
                 target=database.Character.id,
@@ -136,7 +139,7 @@ async def populate_characters(
                     database.CharacterTag(
                         character=character.id,
                         tag=tag,
-                    )
+                    ),
                 )
                 # .on_conflict(
                 #     action="DO UPDATE",
@@ -152,7 +155,7 @@ async def populate_characters(
                     database.Skill(
                         id=skill.id,
                         display_id=skill.display_id,
-                    )
+                    ),
                 ).on_conflict(
                     action="DO UPDATE",
                     target=database.Skill.id,
@@ -169,7 +172,7 @@ async def populate_characters(
                             character=character.id,
                             skill=skill.id,
                             level=level,
-                        )
+                        ),
                     )
                     # .on_conflict(
                     #     action="DO UPDATE",
@@ -193,7 +196,7 @@ async def populate_characters(
                                 mastery=mastery_id,
                                 item=item.id,
                                 quantity=item.count,
-                            )
+                            ),
                         )
                         # .on_conflict(
                         #     action="DO UPDATE",
@@ -213,7 +216,7 @@ async def populate_characters(
                     database.CharacterElitePhase(
                         character=character.id,
                         level=level,
-                    )
+                    ),
                 )
                 # .on_conflict(
                 #     action="DO UPDATE",
@@ -236,7 +239,7 @@ async def populate_characters(
                             elite_phase=elite_phase_id,
                             item=item.id,
                             quantity=item.count,
-                        )
+                        ),
                     )
                     # .on_conflict(
                     #     action="DO UPDATE",
@@ -254,7 +257,7 @@ async def populate_characters(
                     database.SkillSharedUpgrade(
                         character=character.id,
                         level=level,
-                    )
+                    ),
                 )
                 # .on_conflict(
                 #     action="DO UPDATE",
@@ -277,7 +280,7 @@ async def populate_characters(
                             upgrade=skill_cost_id,
                             item=item.id,
                             quantity=item.count,
-                        )
+                        ),
                     )
                     # .on_conflict(
                     #     action="DO UPDATE",

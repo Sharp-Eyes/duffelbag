@@ -30,14 +30,12 @@ class RawSkillLevel(pydantic.BaseModel):
     sp_data: RawSpData = pydantic.Field(alias="spData")
 
     @pydantic.model_validator(mode="before")  # pyright: ignore
-    def parse_description(cls, values: dict[str, object]) -> dict[str, object]:
+    def parse_description(cls, values: dict[str, object]) -> dict[str, object]:  # noqa: N805
         description = typing.cast(str, values["description"])
         blackboard = typing.cast(list[dict[str, object]], values["blackboard"])
 
-        # We need to go from e.g.
-        # [{"id": "a", value: 1}, {"id": "b", value: 2}]
-        # to
-        # {"a": 1, "b": 2}
+        # We need to go from e.g. [{"id": "a", value: 1}, {"id": "b", value: 2}]
+        # to {"a": 1, "b": 2}
         blackboard_map: dict[str, object] = dict(map(dict.values, blackboard))  # pyright: ignore
 
         # Replace colour tags by something we can actually use.

@@ -6,7 +6,7 @@ import attrs
 
 
 @attrs.define(auto_exc=True, slots=False, init=False)
-class DuffelbagException(Exception):
+class DuffelbagError(Exception):
     """Base exception class for exceptions raised by Duffelbag."""
 
     message: str
@@ -18,21 +18,21 @@ class DuffelbagException(Exception):
 
 
 @attrs.define(auto_exc=True, slots=False, init=False)
-class AuthException(DuffelbagException):
+class AuthError(DuffelbagError):
     """Base exception class for exceptions raised as part of authentication."""
 
 
 @attrs.define(auto_exc=True, slots=False, init=True)
-class CredentialSizeViolation(DuffelbagException):
+class CredentialSizeViolationError(DuffelbagError):
     """Login credentials were too short or too long."""
 
     credential: str
-    min: int
-    max: int
+    min_size: int
+    max_size: int
 
 
 @attrs.define(auto_exc=True, slots=False, init=True)
-class CredentialCharacterViolation(DuffelbagException):
+class CredentialCharacterViolationError(DuffelbagError):
     """Login credentials used invalid characters."""
 
     credential: str
@@ -40,7 +40,7 @@ class CredentialCharacterViolation(DuffelbagException):
 
 
 @attrs.define(auto_exc=True, slots=False, init=True)
-class DuffelbagUserExists(AuthException):
+class DuffelbagUserExistsError(AuthError):
     """A new user could not be created because it conflicts with an existing one."""
 
     username: str
@@ -48,12 +48,12 @@ class DuffelbagUserExists(AuthException):
 
 
 @attrs.define(auto_exc=True, slots=False, init=True)
-class DuffelbagLoginFailure(AuthException):
+class DuffelbagLoginError(AuthError):
     """Invalid credentials for a Duffelbag account were provided."""
 
 
 @attrs.define(auto_exc=True, slots=False, init=True)
-class DuffelbagDeletionAlreadyQueued(AuthException):
+class DuffelbagDeletionAlreadyQueuedError(AuthError):
     """A user tried to delete a Duffelbag account that is already scheduled for deletion."""
 
     username: str
@@ -63,12 +63,12 @@ class DuffelbagDeletionAlreadyQueued(AuthException):
 
 
 @attrs.define(auto_exc=True, slots=False, init=True)
-class DuffelbagDeletionNotQueued(AuthException):
+class DuffelbagDeletionNotQueuedError(AuthError):
     """Tried to get a Duffelbag account that is not scheduled for deletion."""
 
 
 @attrs.define(auto_exc=True, slots=False, init=True)
-class DuffelbagConnectionNotFound(AuthException):
+class DuffelbagConnectionNotFoundError(AuthError):
     """Could not find a duffelbag account for a given platform account."""
 
     platform_id: int
@@ -78,7 +78,7 @@ class DuffelbagConnectionNotFound(AuthException):
 
 
 @attrs.define(auto_exc=True, slots=False, init=True)
-class PlatformLoginFailure(AuthException):
+class PlatformLoginError(AuthError):
     """Failed to login to a Duffelbag account by means of a provided platform account."""
 
     platform: str
@@ -86,7 +86,7 @@ class PlatformLoginFailure(AuthException):
 
 
 @attrs.define(auto_exc=True, slots=False, init=True)
-class PlatformConnectionExists(AuthException):
+class PlatformConnectionExistsError(AuthError):
     """Attempted to connect the same external account to two different Duffelbag accounts."""
 
     username: str
@@ -98,7 +98,7 @@ class PlatformConnectionExists(AuthException):
 
 
 @attrs.define(auto_exc=True, slots=False, init=True)
-class PlatformConnectionNotFound(AuthException):
+class PlatformConnectionNotFoundError(AuthError):
     """Could not find a connected account for a given Duffelbag account."""
 
     username: str
@@ -108,7 +108,7 @@ class PlatformConnectionNotFound(AuthException):
 
 
 @attrs.define(auto_exc=True, slots=False, init=True)
-class ArknightsConnectionExists(AuthException):
+class ArknightsConnectionExistsError(AuthError):
     """Attempted to connect the same Arknights account to two different Duffelbag accounts."""
 
     username: str
@@ -122,7 +122,7 @@ class ArknightsConnectionExists(AuthException):
 
 
 @attrs.define(auto_exc=True, slots=False, init=True)
-class InvalidEmail(AuthException):
+class InvalidEmailError(AuthError):
     """Attempted to bind an Arknights account with an invalid email address."""
 
     email: str

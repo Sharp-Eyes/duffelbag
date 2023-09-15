@@ -39,17 +39,17 @@ class Platform(enum.Enum):
 def _ensure_valid_pass(password: str) -> None:
     if not MAX_PASS_LEN >= len(password) >= MIN_PASS_LEN:
         msg = f"Passwords must be between {MIN_PASS_LEN} and {MAX_PASS_LEN} characters in length."
-        raise exceptions.CredentialSizeViolation(msg, "password", MIN_PASS_LEN, MAX_PASS_LEN)
+        raise exceptions.CredentialSizeViolationError(msg, "password", MIN_PASS_LEN, MAX_PASS_LEN)
 
 
 def _ensure_valid_user(username: str) -> None:
     if not MAX_USER_LEN >= len(username) >= MIN_USER_LEN:
         msg = f"Usernames must be between {MIN_USER_LEN} and {MAX_USER_LEN} characters in length."
-        raise exceptions.CredentialSizeViolation(msg, "username", MIN_USER_LEN, MAX_USER_LEN)
+        raise exceptions.CredentialSizeViolationError(msg, "username", MIN_USER_LEN, MAX_USER_LEN)
 
     if not USER_PATTERN.fullmatch(username):
         msg = "Usernames must only contain alphanumerical characters, dashes and underscores."
-        raise exceptions.CredentialCharacterViolation(
+        raise exceptions.CredentialCharacterViolationError(
             msg,
             credential="username",
             allowed_chars="a-z, A-Z, 0-9, \\_, -",
@@ -109,7 +109,7 @@ async def create_user(
 
         except asyncpg.UniqueViolationError as exc:
             msg = f"A user named {username!r} already exists. Please try another username."
-            raise exceptions.DuffelbagUserExists(msg, username=username) from exc
+            raise exceptions.DuffelbagUserExistsError(msg, username=username) from exc
 
         else:
             # NOTE: If this raises, the transaction is automatically rolled back.
@@ -125,7 +125,7 @@ def verify_password(*, duffelbag_user: database.DuffelbagUser, password: str) ->
 
     except argon2.exceptions.VerifyMismatchError as exc:
         msg = "The entered password is incorrect."
-        raise exceptions.DuffelbagLoginFailure(msg) from exc
+        raise exceptions.DuffelbagLoginError(msg) from exc
 
 
 async def login_user(*, username: str, password: str) -> database.DuffelbagUser:
@@ -166,14 +166,16 @@ async def login_user(*, username: str, password: str) -> database.DuffelbagUser:
 
     if not duffelbag_user:
         msg = f"No Duffelbag user named {username!r} exists."
-        raise exceptions.DuffelbagLoginFailure(msg)
+        raise exceptions.DuffelbagLoginError(msg)
 
     verify_password(duffelbag_user=duffelbag_user, password=password)
     return duffelbag_user
 
 
 async def schedule_user_deletion(
-    duffelbag_user: database.DuffelbagUser, *, password: str
+    duffelbag_user: database.DuffelbagUser,
+    *,
+    password: str,
 ) -> database.ScheduledUserDeletion:
     """Schedule an existing Duffelbag account and all related user information for deletion.
 
@@ -188,7 +190,7 @@ async def schedule_user_deletion(
     """
     verify_password(duffelbag_user=duffelbag_user, password=password)
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     deletion_ts = now + datetime.timedelta(seconds=DELETION_GRACE_PERIOD_SECONDS)
 
     scheduled_deletion = database.ScheduledUserDeletion(
@@ -213,7 +215,7 @@ async def schedule_user_deletion(
             " their account, but it is already scheduled for deletion at"
             f"{existing_deletion.deletion_ts}."
         )
-        raise exceptions.DuffelbagDeletionAlreadyQueued(
+        raise exceptions.DuffelbagDeletionAlreadyQueuedError(
             msg,
             username=duffelbag_user.username,
             deletion_ts=existing_deletion.deletion_ts,
@@ -242,7 +244,7 @@ async def get_scheduled_user_deletion_user(
             f"Duffelbag user with id {scheduled_user_deletion.user} is not"
             " scheduled for deletion."
         )
-        raise exceptions.DuffelbagDeletionNotQueued(msg)
+        raise exceptions.DuffelbagDeletionNotQueuedError(msg)
 
     return duffelbag_user
 
@@ -287,7 +289,7 @@ async def get_user_by_platform(
             f"Could not find a duffelbag account for {platform.value} user with"
             f" id {platform_id}."
         )
-        raise exceptions.DuffelbagConnectionNotFound(
+        raise exceptions.DuffelbagConnectionNotFoundError(
             msg,
             platform_id=platform_id,
             platform=platform.value,
@@ -297,7 +299,10 @@ async def get_user_by_platform(
 
 
 async def recover_user(
-    *, platform: Platform, platform_id: int, password: str
+    *,
+    platform: Platform,
+    platform_id: int,
+    password: str,
 ) -> database.DuffelbagUser:
     """Recover an existing Duffelbag account through a connected external platform account.
 
@@ -337,12 +342,12 @@ async def recover_user(
             f"External platform account with id '{platform_id}' on platform"
             f" {platform.value!r} is not bound to any Duffelbag account."
         )
-        raise exceptions.PlatformLoginFailure(msg, platform=platform.value)
+        raise exceptions.PlatformLoginError(msg, platform=platform.value)
 
     # Update password.
     duffelbag_user.password = _HASHER.hash(password)
     await duffelbag_user.save(  # pyright: ignore[reportUnknownMemberType]
-        [database.DuffelbagUser.password]
+        [database.DuffelbagUser.password],
     )
 
     return duffelbag_user
@@ -352,7 +357,10 @@ async def recover_user(
 
 
 async def add_platform_account(
-    duffelbag_user: database.DuffelbagUser, *, platform: Platform, platform_id: int
+    duffelbag_user: database.DuffelbagUser,
+    *,
+    platform: Platform,
+    platform_id: int,
 ) -> database.PlatformUser:
     """Add a platform account to an existing Duffelbag account.
 
@@ -399,7 +407,7 @@ async def add_platform_account(
             f"External platform account with id '{platform_id}' on platform"
             f" {platform.value!r} is already registered to a Duffelbag account."
         )
-        raise exceptions.PlatformConnectionExists(
+        raise exceptions.PlatformConnectionExistsError(
             msg,
             username=duffelbag_user.username,
             existing_username=existing_user.username,
@@ -411,7 +419,10 @@ async def add_platform_account(
 
 
 async def remove_platform_account(
-    duffelbag_user: database.DuffelbagUser, *, platform: Platform, platform_id: int
+    duffelbag_user: database.DuffelbagUser,
+    *,
+    platform: Platform,
+    platform_id: int,
 ) -> None:
     """Remove a platform account from an existing Duffelbag account.
 
@@ -436,7 +447,7 @@ async def remove_platform_account(
         .where(
             (database.PlatformUser.user == duffelbag_user.id)
             & (database.PlatformUser.platform_id == platform_id)
-            & (database.PlatformUser.platform_name == platform.value)
+            & (database.PlatformUser.platform_name == platform.value),
         )
         .returning(database.PlatformUser.id)
     )
@@ -449,7 +460,7 @@ async def remove_platform_account(
         f" {platform.value!r} is registered to the Duffelbag account with"
         f" username {duffelbag_user.username!r} and ID '{duffelbag_user.id}'."
     )
-    raise exceptions.PlatformConnectionNotFound(
+    raise exceptions.PlatformConnectionNotFoundError(
         msg,
         username=duffelbag_user.username,
         platform=platform.value,
@@ -457,7 +468,9 @@ async def remove_platform_account(
 
 
 async def list_connected_accounts(
-    duffelbag_user: database.DuffelbagUser, *, platform: Platform | None
+    duffelbag_user: database.DuffelbagUser,
+    *,
+    platform: Platform | None,
 ) -> typing.Sequence[database.PlatformUser]:
     """Return all external platform accounts connected to the provided Duffelbag account.
 
@@ -529,7 +542,7 @@ async def start_authentication(duffelbag_user: database.DuffelbagUser, *, email:
             f"The arknights account with email address {email!r} is already"
             " registered to a Duffelbag user."
         )
-        raise exceptions.ArknightsConnectionExists(
+        raise exceptions.ArknightsConnectionExistsError(
             msg,
             username=duffelbag_user.username,
             existing_username=existing_user.username,
@@ -623,7 +636,7 @@ async def add_arknights_account(
         assert existing_user
 
         msg = "This Arknights user is already registered to a different Duffelbag account."
-        raise exceptions.ArknightsConnectionExists(
+        raise exceptions.ArknightsConnectionExistsError(
             msg,
             username=duffelbag_user.username,
             existing_username=existing_user.username,

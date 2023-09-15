@@ -26,7 +26,7 @@ class Duffelbag(commands.InteractionBot):
 
     async def _delayed_command_sync(self) -> None:
         if (
-            not self._command_sync_flags._sync_enabled
+            not self._command_sync_flags._sync_enabled  # noqa: SLF001
             or not self.is_ready()
             or self._is_closed
             or self.loop.is_closed()

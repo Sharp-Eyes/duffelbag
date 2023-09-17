@@ -1,8 +1,3 @@
-## Pre-commit setup, mostly yoinked from disnake/mafic
-
-ci:
-  autofix_commit_msg: |
-    style: auto fixes from pre-commit hooks
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0
@@ -25,40 +20,36 @@ repos:
         name: Check for trailing whitespace.
         args: [--markdown-linebreak-ext=md]
 
-  - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: v0.0.270
-    hooks:
-      - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
-        name: Running ruff in all files.
-
-  - repo: https://github.com/psf/black
-    rev: 23.3.0
+  ## The rest is entirely local as dependencies are synced through lockfile.
+  ## This also makes it easier to keep pre-commit tool versions synced with
+  ## poetry's versions.
+  - repo: local
     hooks:
       - id: black
-        name: Running black in all files.
-        exclude: database/piccolo_migrations
+        name: black
+        entry: poetry run black
+        language: system
+        types: [python]
+        exclude: "database/piccolo_migrations"
 
-  - repo: https://github.com/ariebovenberg/slotscheck
-    rev: v0.16.4
-    hooks:
+      - id: pyright
+        name: pyright
+        entry: poetry run pyright
+        language: system
+        types: [python]
+        exclude: "database/piccolo_migrations"
+
+      - id: ruff
+        name: ruff
+        entry: poetry run ruff
+        language: system
+        types: [python]
+        args: [--fix, --exit-non-zero-on-fix]
+        exclude: "database/piccolo_migrations"
+
       - id: slotscheck
-        name: Running slotscheck in all files.
-        exclude: "piccolo_conf.py"
-        additional_dependencies: [
-          piccolo,
-          pydantic,
-          aiohttp,
-          python-dotenv,
-          arkprts,
-          asyncpg,
-          argon2-cffi,
-          coloredlogs,
-          # speedups
-          uvloop,
-          orjson,
-          # discord
-          disnake,
-          "git+https://github.com/DisnakeCommunity/disnake-ext-components.git@90bfb6949bed072565b47d3beeec95aa0de0a058",
-          "git+https://github.com/DisnakeCommunity/disnake-ext-plugins",
-        ]
+        name: slotscheck
+        entry: poetry run slotscheck
+        language: system
+        types: [python]
+        exclude: "database/piccolo_migrations|piccolo_conf.py"

@@ -24,7 +24,7 @@ slotscheck = "^0.17.0"
 
 
 [tool.poetry.group.discord.dependencies]
-disnake = "^2.8.1"
+disnake = "^2.9.0"
 disnake-ext-plugins = {git = "https://github.com/DisnakeCommunity/disnake-ext-plugins"}
 disnake-ext-components = {git = "https://github.com/DisnakeCommunity/disnake-ext-components", rev = "rewrite"}
 
@@ -82,11 +82,15 @@ ignore = [
     "FIX002", "FIX004",
     # TODO comments do not need to have an author or issue specified.
     "TD002", "TD003",
+    # Function calls in parameter defaults are disnake syntax.
+    "B008",
+    # We don't use pandas and this triggers on any `.values` access.
+    "PD",
 ]
 
 
 [tool.ruff.per-file-ignores]
-# T201: Allow printing in scripts.
+# Allow printing in scripts.
 "scripts/*" = ["T201"]
 # Wildcard imports are fine in __init__; more convenient than duplicating exports and maintaining them.
 "__init__.py" = ["F403", "F405"]

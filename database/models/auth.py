@@ -42,6 +42,8 @@ class ArknightsUser(table.Table):
     channel_uid = columns.Varchar(16)
     yostar_token = columns.Varchar(32)
     email = columns.Email()
+    server = columns.Varchar(4)
+    active = columns.Boolean()
 
     # NOTE: As of migration 2023-05-31T10:47:00:954167, there is a composite
     #       unique constraint on (channel_uid, yostar_token) with name

@@ -1,6 +1,7 @@
 """Module containing exceptions raised by the Duffelbag bot."""
 
 import datetime
+import typing
 
 import attrs
 
@@ -48,8 +49,11 @@ class DuffelbagUserExistsError(AuthError):
 
 
 @attrs.define(auto_exc=True, slots=False, init=True)
-class DuffelbagLoginError(AuthError):
-    """Invalid credentials for a Duffelbag account were provided."""
+class LoginError(AuthError):
+    """Invalid credentials for an account were provided."""
+
+    account_type: typing.Literal["Duffelbag", "Platform", "Arknights"]
+    """The type of account. Can be 'Duffelbag', 'Platform' or 'Arknights'."""
 
 
 @attrs.define(auto_exc=True, slots=False, init=True)
@@ -73,14 +77,6 @@ class DuffelbagConnectionNotFoundError(AuthError):
 
     platform_id: int
     """The user id of the platform account."""
-    platform: str
-    """The name of the target platform."""
-
-
-@attrs.define(auto_exc=True, slots=False, init=True)
-class PlatformLoginError(AuthError):
-    """Failed to login to a Duffelbag account by means of a provided platform account."""
-
     platform: str
     """The name of the target platform."""
 
@@ -119,6 +115,14 @@ class ArknightsConnectionExistsError(AuthError):
     """The email address of the existing Arknights account."""
     is_own: bool
     """Whether the Arknights account is registered to the same Duffelbag account."""
+
+
+@attrs.define(auto_exc=True, slots=False, init=True)
+class NoActiveAccountError(AuthError):
+    """No Arknights account was designated as the active account for the given Duffelbag account."""
+
+    username: str
+    """The username of the Duffelbag account."""
 
 
 @attrs.define(auto_exc=True, slots=False, init=True)

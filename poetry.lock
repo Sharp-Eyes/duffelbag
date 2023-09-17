@@ -192,9 +192,9 @@ tests = ["pytest"]
 [[package]]
 name = "arkprts"
 version = "0.3.0"
-description = ""
+description = "Arknights python wrapper."
 optional = false
-python-versions = "*"
+python-versions = ">=3.9"
 files = []
 develop = false
 
@@ -212,7 +212,7 @@ rsa = ["rsa"]
 type = "git"
 url = "https://github.com/thesadru/arkprts"
 reference = "HEAD"
-resolved_reference = "fd9ef6c09326ed9e6c467b032f5b2b1541fe5ac5"
+resolved_reference = "a0c6719befe2e7d660b7219429d89fe2e3ec08a3"
 
 [[package]]
 name = "asttokens"
@@ -350,8 +350,6 @@ mypy-extensions = ">=0.4.3"
 packaging = ">=22.0"
 pathspec = ">=0.9.0"
 platformdirs = ">=2"
-tomli = {version = ">=1.1.0", markers = "python_version < \"3.11\""}
-typing-extensions = {version = ">=4.0.1", markers = "python_version < \"3.11\""}
 
 [package.extras]
 colorama = ["colorama (>=0.4.3)"]
@@ -627,7 +625,7 @@ typing-extensions = "^4.4.0"
 type = "git"
 url = "https://github.com/DisnakeCommunity/disnake-ext-components"
 reference = "rewrite"
-resolved_reference = "ce9234ee98db81ffcc02211e33c083bfe69b55fe"
+resolved_reference = "1911857dc34fee6e32910f9a5e1f8fc67d4f938c"
 
 [[package]]
 name = "disnake-ext-plugins"
@@ -820,13 +818,13 @@ pyreadline3 = {version = "*", markers = "sys_platform == \"win32\" and python_ve
 
 [[package]]
 name = "identify"
-version = "2.5.28"
+version = "2.5.29"
 description = "File identification library for Python"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "identify-2.5.28-py2.py3-none-any.whl", hash = "sha256:87816de144bf46d161bd5b3e8f5596b16cade3b80be537087334b26bc5c177f3"},
-    {file = "identify-2.5.28.tar.gz", hash = "sha256:94bb59643083ebd60dc996d043497479ee554381fbc5307763915cda49b0e78f"},
+    {file = "identify-2.5.29-py2.py3-none-any.whl", hash = "sha256:24437fbf6f4d3fe6efd0eb9d67e24dd9106db99af5ceb27996a5f7895f24bf1b"},
+    {file = "identify-2.5.29.tar.gz", hash = "sha256:d43d52b86b15918c137e3a74fff5224f60385cd0e9c38e99d07c257f02f151a5"},
 ]
 
 [package.extras]
@@ -1490,6 +1488,20 @@ files = [
 ]
 
 [[package]]
+name = "slotscheck"
+version = "0.17.0"
+description = "Ensure your __slots__ are working properly."
+optional = false
+python-versions = ">=3.8.1,<4"
+files = [
+    {file = "slotscheck-0.17.0-py3-none-any.whl", hash = "sha256:7ff6d6cc5e58e12f96c82bf192e6498412dd6fc3aa230937f32935c2151b3d2e"},
+    {file = "slotscheck-0.17.0.tar.gz", hash = "sha256:5e4ccb16148825b6a644705a4f8ca30855c853e4a777229ec5ed1ee4a55fa97c"},
+]
+
+[package.dependencies]
+click = ">=8.0,<9.0"
+
+[[package]]
 name = "targ"
 version = "0.3.8"
 description = "Build a Python CLI for your app, just using type hints and docstrings."
@@ -1503,17 +1515,6 @@ files = [
 [package.dependencies]
 colorama = "==0.4.*"
 docstring-parser = ">=0.12"
-
-[[package]]
-name = "tomli"
-version = "2.0.1"
-description = "A lil' TOML parser"
-optional = false
-python-versions = ">=3.7"
-files = [
-    {file = "tomli-2.0.1-py3-none-any.whl", hash = "sha256:939de3e7a6161af0c887ef91b7d41a53e7c5a1ca976325f429cb46ea9bc30ecc"},
-    {file = "tomli-2.0.1.tar.gz", hash = "sha256:de526c12914f0c550d15924c62d72abc48d6fe7364aa87328337a31007fe8a4f"},
-]
 
 [[package]]
 name = "typing-extensions"
@@ -1679,5 +1680,5 @@ multidict = ">=4.0"
 
 [metadata]
 lock-version = "2.0"
-python-versions = "^3.10"
-content-hash = "65399ee4278f69bfd86fdcb9cc1a7f9a1492f01b8bf31fe834411bc9bb5adeea"
+python-versions = "^3.11"
+content-hash = "7f8bb97787a4b70c2b881ad36aa46070941d180b2389a42a4e4b633ba96d9174"

@@ -137,13 +137,13 @@ async def account_duffelbag_delete(
     )
 
 
-@account.sub_command_group(name="bind")  # pyright: ignore
-async def account_bind(_: disnake.CommandInteraction) -> None:
-    """Bind an account."""
+@account.sub_command_group(name="discord")  # pyright: ignore
+async def account_discord(_: disnake.CommandInteraction) -> None:
+    """Do stuff with a Discord account."""
 
 
-@account_bind.sub_command(name="platform")  # pyright: ignore
-async def account_bind_platform(
+@account_discord.sub_command(name="bind")  # pyright: ignore
+async def account_discord_bind(
     inter: disnake.CommandInteraction,
     username: str = _USER_PARAM,
     password: str = _PASS_PARAM,
@@ -170,10 +170,16 @@ async def account_bind_platform(
     )
 
 
-@account_bind.sub_command(name="arknights")  # pyright: ignore
-async def account_bind_arknights(
+@account.sub_command_group(name="arknights")  # pyright: ignore
+async def account_arknights(_: disnake.CommandInteraction) -> None:
+    """Do stuff with an Arknights account."""
+
+
+@account_arknights.sub_command(name="bind")  # pyright: ignore
+async def account_arknights_bind(
     inter: disnake.CommandInteraction,
-    email: str,
+    server: auth.ArknightsServer = commands.Param(converter=lambda _, v: auth.ArknightsServer(v)),
+    email: str = commands.Param(),
 ) -> None:
     """Bind an Arknights account to your Duffelbag account."""
     await inter.response.defer(ephemeral=True)
@@ -188,10 +194,11 @@ async def account_bind_arknights(
         strict=True,
     )
 
-    await auth.start_authentication(duffelbag_user, email=email)
+    await auth.start_authentication(duffelbag_user, server=server, email=email)
 
     button = ArknightsBindButton(
         label=localisation.localise("auth_bind_ak_title", locale=inter.locale),
+        server=server,
         email=email,
     )
 
@@ -207,6 +214,34 @@ async def account_bind_arknights(
     )
 
 
+@account_arknights.sub_command(name="set-active")  # pyright: ignore
+async def account_arknights_set_active(inter: disnake.CommandInteraction) -> None:
+    """Set a different Arknights account as your active account."""
+    await inter.response.defer(ephemeral=True)
+
+    duffelbag_user = await auth.get_user_by_platform(
+        platform=auth.Platform.DISCORD,
+        platform_id=inter.author.id,
+        strict=True,
+    )
+    arknights_accounts = await auth.list_arknights_accounts(duffelbag_user)
+
+    options = [
+        disnake.SelectOption(
+            label=f"{ak.email} [{ak.server}]",
+            value=f"{ak.email}{ArknightsActiveAccountSelect.sep}{ak.server}",
+            default=ak.active,
+        )
+        for ak in arknights_accounts
+    ]
+
+    wrapped = components.wrap_interaction(inter)
+    await wrapped.edit_original_response(
+        localisation.localise("auth_ak_set_active", inter.locale),
+        components=[ArknightsActiveAccountSelect(options=options)],
+    )
+
+
 @manager.register(identifier="ArkBind")
 class ArknightsBindButton(components.RichButton):
     """Button to complete the Arknights account verification process."""
@@ -214,6 +249,9 @@ class ArknightsBindButton(components.RichButton):
     label: str
     style: disnake.ButtonStyle = disnake.ButtonStyle.success
 
+    server: auth.ArknightsServer = components.field(
+        parser=components.parser.EnumParser(auth.ArknightsServer),
+    )
     email: str
 
     async def callback(self, inter: components.MessageInteraction) -> None:
@@ -258,14 +296,43 @@ class ArknightsBindButton(components.RichButton):
             strict=True,
         )
 
-        await auth.complete_authentication(
+        arknights_user = await auth.complete_authentication(
             duffelbag_user,
+            server=self.server,
             email=self.email,
             verification_code=verification_code,
         )
 
         await modal_inter.edit_original_response(
-            localisation.localise("auth_bind_ak_success", locale=inter.locale),
+            localisation.localise(
+                "auth_bind_ak_success_active" if arknights_user.active else "auth_bind_ak_success",
+                locale=inter.locale,
+            ),
+        )
+
+
+@manager.register(identifier="ArkActive")
+class ArknightsActiveAccountSelect(components.RichStringSelect):
+    """Select menu to set a user's active Arknights account."""
+
+    sep: typing.ClassVar[str] = "|"
+
+    min_values: int = 1
+    max_values: int = 1
+
+    async def callback(self, inter: components.MessageInteraction) -> None:
+        """Select an Arknights account to mark as active."""
+        assert inter.values  # min_values is 1 so cannot be none.
+
+        email, server = inter.values[0].split(self.sep)
+        server = auth.ArknightsServer(server)
+
+        arknights_user = await auth.get_arknights_account_by_server_email(server, email)
+        await auth.set_active_arknights_account(arknights_user)
+
+        await inter.response.edit_message(
+            localisation.localise("auth_ak_set_active_success", inter.locale),
+            components=None,
         )
 
 
@@ -305,11 +372,15 @@ async def account_error_handler(
                 ),
             )
 
-        case exceptions.DuffelbagLoginError():
+        case exceptions.LoginError(account_type="Duffelbag"):
             key = "exc_auth_dfb_loginfail"
 
-        case exceptions.PlatformLoginError():
+        case exceptions.LoginError(account_type="Platform"):
             key = "exc_auth_pf_loginfail"
+            params["platform"] = auth.Platform.DISCORD.value
+
+        case exceptions.LoginError(account_type="Arknights"):
+            key = "exc_auth_ak_loginfail"
 
         case exceptions.PlatformConnectionExistsError(is_own=is_own):
             key = "exc_auth_pf_exists_self" if is_own else "exc_auth_pf_exists"

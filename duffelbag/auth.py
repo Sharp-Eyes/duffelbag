@@ -15,7 +15,6 @@ import database
 from duffelbag import exceptions
 
 # Ensure passwords are hashed at the correct length. Should be 32 chars.
-_AUTH = arkprts.YostarAuth()
 _HASHER = argon2.PasswordHasher(hash_len=32)
 MIN_PASS_LEN = 8
 MAX_PASS_LEN = 32
@@ -24,6 +23,30 @@ MAX_USER_LEN = 32
 DELETION_GRACE_PERIOD_SECONDS = 24 * 3600
 
 USER_PATTERN = re.compile(r"[a-zA-Z0-9\-_]{4,32}")
+
+
+class ArknightsServer(enum.Enum):
+    """Arknights server to which an account is registered."""
+
+    EN = "en"
+    JP = "jp"
+    KR = "kr"
+
+    # TODO: implement auth for CN/Bilibili(/TW)
+    # CN = "cn"  # noqa: ERA001
+    # BILI = "bili"  # noqa: ERA001
+    # TW = "tw"  # noqa: ERA001
+
+
+_AUTH_MAP = {
+    ArknightsServer.EN: arkprts.YostarAuth("en"),
+    ArknightsServer.JP: arkprts.YostarAuth("jp"),
+    ArknightsServer.KR: arkprts.YostarAuth("kr"),
+    # TODO: implement auth for CN/Bilibili(/TW)
+    # ArknightsServer.CN: arkprts.HypergryphAuth(),
+    # ArknightsServer.BILI: arkprts.BilibiliAuth(),
+    # ArknightsServer.TW: arkprts.auth.LongchengAuth(),
+}
 
 
 class Platform(enum.Enum):
@@ -125,7 +148,7 @@ def verify_password(*, duffelbag_user: database.DuffelbagUser, password: str) ->
 
     except argon2.exceptions.VerifyMismatchError as exc:
         msg = "The entered password is incorrect."
-        raise exceptions.DuffelbagLoginError(msg) from exc
+        raise exceptions.LoginError(msg, account_type="Duffelbag") from exc
 
 
 async def login_user(*, username: str, password: str) -> database.DuffelbagUser:
@@ -166,7 +189,7 @@ async def login_user(*, username: str, password: str) -> database.DuffelbagUser:
 
     if not duffelbag_user:
         msg = f"No Duffelbag user named {username!r} exists."
-        raise exceptions.DuffelbagLoginError(msg)
+        raise exceptions.LoginError(msg, account_type="Duffelbag")
 
     verify_password(duffelbag_user=duffelbag_user, password=password)
     return duffelbag_user
@@ -342,7 +365,7 @@ async def recover_user(
             f"External platform account with id '{platform_id}' on platform"
             f" {platform.value!r} is not bound to any Duffelbag account."
         )
-        raise exceptions.PlatformLoginError(msg, platform=platform.value)
+        raise exceptions.LoginError(msg, account_type="Platform")
 
     # Update password.
     duffelbag_user.password = _HASHER.hash(password)
@@ -509,7 +532,12 @@ async def _recover_user_by_email(*, email: str) -> database.DuffelbagUser | None
     )  # fmt: skip
 
 
-async def start_authentication(duffelbag_user: database.DuffelbagUser, *, email: str) -> None:
+async def start_authentication(
+    duffelbag_user: database.DuffelbagUser,
+    *,
+    server: ArknightsServer,
+    email: str,
+) -> None:
     """Start the authentication process to register a new Arknights account to a Duffelbag account.
 
     As a result of running this function, a verification email will be sent to
@@ -521,6 +549,8 @@ async def start_authentication(duffelbag_user: database.DuffelbagUser, *, email:
     ----------
     duffelbag_user:
         The duffelbag account to which to register the Arknights account.
+    server:
+        The server on which the Arknights account is registered.
     email:
         The email address of the Arknights account that is to be registered.
         A verification email will be sent to this email address.
@@ -551,12 +581,13 @@ async def start_authentication(duffelbag_user: database.DuffelbagUser, *, email:
         )
 
     # This sends the authentication email to the user.
-    await _AUTH.get_token_from_email_code(email)
+    await _AUTH_MAP[server].get_token_from_email_code(email)
 
 
 async def complete_authentication(
     duffelbag_user: database.DuffelbagUser,
     *,
+    server: ArknightsServer,
     email: str,
     verification_code: str,
 ) -> database.ArknightsUser:
@@ -569,6 +600,8 @@ async def complete_authentication(
     ----------
     duffelbag_user:
         The duffelbag account to which to register the Arknights account.
+    server:
+        The server on which the Arknights account is registered.
     email:
         The email of the user that is to be authenticated.
     verification_code:
@@ -581,9 +614,15 @@ async def complete_authentication(
         The Arknights account is already registered to a Duffelbag account.
     """
     # This finalises the authentication process.
-    uid, token = await _AUTH.get_token_from_email_code(email, verification_code)
+    uid, token = await _AUTH_MAP[server].get_token_from_email_code(email, verification_code)
 
-    return await add_arknights_account(duffelbag_user, uid=uid, token=token, email=email)
+    return await add_arknights_account(
+        duffelbag_user,
+        uid=uid,
+        token=token,
+        email=email,
+        server=server,
+    )
 
 
 async def add_arknights_account(
@@ -592,6 +631,7 @@ async def add_arknights_account(
     uid: str,
     token: str,
     email: str,
+    server: ArknightsServer,
 ) -> database.ArknightsUser:
     """Add an Arknights account to an existing Duffelbag account.
 
@@ -604,6 +644,8 @@ async def add_arknights_account(
         The Arknights channel uid for account that is to be added.
     token:
         The Yostar token for the account that is to be added.
+    server:
+        The server on which the Arknights account is registered.
     email:
         The email address to register to the account.
 
@@ -617,11 +659,21 @@ async def add_arknights_account(
     :class:`exceptions.ArknightsConnectionExists`
         The Arknights account is already registered to a Duffelbag account.
     """
+    exists: bool = await (
+        database.ArknightsUser.exists()  # pyright: ignore
+        .where(
+            (database.ArknightsUser.user == duffelbag_user.id)
+            & (database.ArknightsUser.active == True),  # noqa: E712
+        )
+    )  # fmt: skip
+
     new_user = database.ArknightsUser(
         user=duffelbag_user.id,
         channel_uid=uid,
         yostar_token=token,
         email=email,
+        server=server,
+        active=not exists,  # Set active if no other active account exists
     )
 
     try:
@@ -678,3 +730,104 @@ async def list_arknights_accounts(
         database.ArknightsUser.objects()
         .where(database.ArknightsUser.user == duffelbag_user.id)
     )  # fmt: skip
+
+
+async def get_active_arknights_account(
+    duffelbag_user: database.DuffelbagUser,
+) -> database.ArknightsUser:
+    """Return the active Arknights account for the provided Duffelbag account.
+
+    Parameters
+    ----------
+    duffelbag_user:
+        An existing Duffelbag account. This should be acquired using
+        :func:`login_user`.
+
+    Returns
+    -------
+    :class:`database.PlatformUser`
+        The active Arknights account for the provided Duffelbag account.
+    """
+    arknights_user = await (
+        database.ArknightsUser.objects()
+        .where(
+            (database.ArknightsUser.user == duffelbag_user.id)
+            & (database.ArknightsUser.active == True),  # noqa: E712
+        )
+        .first()
+    )  # fmt: skip
+
+    if arknights_user:
+        return arknights_user
+
+    # In case no account is marked as active but the user has only one account,
+    # we just go ahead and make that account their active account.
+    all_arknights_user = await list_arknights_accounts(duffelbag_user)
+    if len(all_arknights_user) == 1:
+        arknights_user = all_arknights_user[0]
+
+        await set_active_arknights_account(arknights_user)
+        return arknights_user
+
+    msg = (
+        f"The duffelbag account with username {duffelbag_user.username!r} does"
+        " not have an active Arknights account set."
+    )
+    raise exceptions.NoActiveAccountError(msg, username=duffelbag_user.username)
+
+
+async def set_active_arknights_account(
+    arknights_user: database.ArknightsUser,
+) -> None:
+    """Set the provided Arknights account as the active account.
+
+    Parameters
+    ----------
+    arknights_user:
+        An existing Arknights account.
+    """
+    active_user = await (
+        database.ArknightsUser.objects()
+        .where(
+            (database.ArknightsUser.user == arknights_user.user)
+            & (database.ArknightsUser.active == True),  # noqa: E712
+        )
+        .first()
+    )  # fmt: skip
+
+    async with database.get_db().transaction():
+        if active_user:
+            if active_user.id == arknights_user.id:
+                return
+
+            active_user.active = False
+            await active_user.save(columns=[database.ArknightsUser.active])  # pyright: ignore
+
+        arknights_user.active = True
+        await arknights_user.save(columns=[database.ArknightsUser.active])  # pyright: ignore
+
+
+async def get_arknights_account_by_server_email(
+    server: ArknightsServer,
+    email: str,
+) -> database.ArknightsUser:
+    """Get an Arknights account by server and email.
+
+    Parameters
+    ----------
+    server:
+        The server on which the Arknights account is registered.
+    email:
+        The email address to register to the account.
+    """
+    arknights_user = await (
+        database.ArknightsUser.objects()
+        .where((database.ArknightsUser.server == server) & (database.ArknightsUser.email == email))
+        .first()
+    )
+
+    if arknights_user:
+        return arknights_user
+
+    msg = f"There is no registered user on server {server.value!r} with email {email!r}."
+    raise exceptions.LoginError(msg, account_type="Arknights")

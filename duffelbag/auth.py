@@ -605,8 +605,7 @@ async def add_arknights_account(
     token:
         The Yostar token for the account that is to be added.
     email:
-        The email address to register to the account. To accommodate user
-        privacy, this is left optional.
+        The email address to register to the account.
 
     Returns
     -------

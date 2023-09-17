@@ -1,5 +1,6 @@
 """Utilities for components."""
 
+import asyncio
 import typing
 
 import disnake
@@ -48,14 +49,22 @@ async def handle_component_exception(
     _manager: components.ComponentManager,
     _component: components.api.RichComponent,
     inter: disnake.Interaction,
-    _exception: Exception,
+    exception: Exception,
 ) -> bool:
     """Handle component exceptions by notifying the user and logging them."""
-    await inter.response.send_message(
-        localisation.localise(
-            "general_component_error",
-            inter.locale,
-        ),
+    params = {}
+
+    match exception:
+        case asyncio.TimeoutError():
+            key = "component_timeout"
+
+        case _:
+            key = "general_component_err"
+
+    # We intentionally use inter.send here as we don't know whether or not the
+    # interaction has been responded to before.
+    await inter.send(
+        localisation.localise(key, inter.locale, format_map=params),
         ephemeral=True,
     )
 

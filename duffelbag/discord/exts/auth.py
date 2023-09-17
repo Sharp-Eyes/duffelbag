@@ -24,7 +24,7 @@ _MessageComponents = interaction_.Components[interaction_.MessageComponents]
 
 
 plugin = plugins.Plugin()
-restricted_manager = components.get_manager("duffelbag.restricted")
+manager = components.get_manager("duffelbag")
 
 
 @plugin.slash_command()
@@ -32,7 +32,7 @@ async def account(_: disnake.CommandInteraction) -> None:
     """Do stuff with accounts."""
 
 
-@account.sub_command_group(name="duffelbag")  # pyright: ignore[reportUnknownMemberType]
+@account.sub_command_group(name="duffelbag")  # pyright: ignore
 async def account_duffelbag(_: disnake.CommandInteraction) -> None:
     """Do stuff with Duffelbag accounts."""
 
@@ -57,7 +57,7 @@ _PASS_PARAM = commands.Param(
 )
 
 
-@account_duffelbag.sub_command(name="create")  # pyright: ignore[reportUnknownMemberType]
+@account_duffelbag.sub_command(name="create")  # pyright: ignore
 async def account_duffelbag_create(
     inter: disnake.CommandInteraction,
     username: str = _USER_PARAM,
@@ -79,7 +79,7 @@ async def account_duffelbag_create(
             inter.locale,
             format_map={"username": username},
         ),
-        components=restricted_manager.make_button(
+        components=manager.make_button(
             "ExpBtn",
             key_base="auth_new",
             params=[username, auth.Platform.DISCORD.value],
@@ -88,7 +88,7 @@ async def account_duffelbag_create(
     )
 
 
-@account_duffelbag.sub_command(name="recover")  # pyright: ignore[reportUnknownMemberType]
+@account_duffelbag.sub_command(name="recover")  # pyright: ignore
 async def account_duffelbag_recover(
     inter: disnake.CommandInteraction,
     password: str = _PASS_PARAM,
@@ -110,7 +110,7 @@ async def account_duffelbag_recover(
     )
 
 
-@account_duffelbag.sub_command(name="delete")  # pyright: ignore[reportUnknownMemberType]
+@account_duffelbag.sub_command(name="delete")  # pyright: ignore
 async def account_duffelbag_delete(
     inter: disnake.CommandInteraction,
     password: str = _PASS_PARAM,
@@ -137,12 +137,12 @@ async def account_duffelbag_delete(
     )
 
 
-@account.sub_command_group(name="bind")  # pyright: ignore[reportUnknownMemberType]
+@account.sub_command_group(name="bind")  # pyright: ignore
 async def account_bind(_: disnake.CommandInteraction) -> None:
     """Bind an account."""
 
 
-@account_bind.sub_command(name="platform")  # pyright: ignore[reportUnknownMemberType]
+@account_bind.sub_command(name="platform")  # pyright: ignore
 async def account_bind_platform(
     inter: disnake.CommandInteraction,
     username: str = _USER_PARAM,
@@ -170,7 +170,7 @@ async def account_bind_platform(
     )
 
 
-@account_bind.sub_command(name="arknights")  # pyright: ignore[reportUnknownMemberType]
+@account_bind.sub_command(name="arknights")  # pyright: ignore
 async def account_bind_arknights(
     inter: disnake.CommandInteraction,
     email: str,
@@ -191,7 +191,7 @@ async def account_bind_arknights(
     await auth.start_authentication(duffelbag_user, email=email)
 
     button = ArknightsBindButton(
-        label=localisation.localise("auth_bind_arknights_title", locale=inter.locale),
+        label=localisation.localise("auth_bind_ak_title", locale=inter.locale),
         email=email,
     )
 
@@ -199,7 +199,7 @@ async def account_bind_arknights(
 
     await wrapped.edit_original_message(
         localisation.localise(
-            "auth_bind_arknights",
+            "auth_bind_ak",
             locale=inter.locale,
             format_map={"email": email},
         ),
@@ -207,7 +207,7 @@ async def account_bind_arknights(
     )
 
 
-@restricted_manager.register(identifier="ArkBind")
+@manager.register(identifier="ArkBind")
 class ArknightsBindButton(components.RichButton):
     """Button to complete the Arknights account verification process."""
 
@@ -220,7 +220,7 @@ class ArknightsBindButton(components.RichButton):
         """Verify and link an Arknights account to a Duffelbag account."""
         custom_id = f"arknights_verify|{inter.id}"
         text_input = disnake.ui.TextInput(
-            label=localisation.localise("auth_bind_arknights_modal_label", inter.locale),
+            label=localisation.localise("auth_bind_ak_modal_label", inter.locale),
             custom_id="verification_code",
             min_length=6,
             max_length=6,
@@ -232,22 +232,24 @@ class ArknightsBindButton(components.RichButton):
             components=[text_input],
         )
 
-        try:
-            modal_inter: disnake.ModalInteraction = await inter.bot.wait_for(
-                disnake.Event.modal_submit,
-                check=lambda modal_inter: modal_inter.custom_id == custom_id,
-                timeout=60,
-            )
-        except asyncio.TimeoutError:
-            # TODO: Localise.
-            await inter.followup.send("Timed out...", ephemeral=True)
-            return
+        # NOTE: asyncio.TimeoutError is handled by the component manager.
+        modal_inter: disnake.ModalInteraction = await inter.bot.wait_for(
+            disnake.Event.modal_submit,
+            check=lambda modal_inter: modal_inter.custom_id == custom_id,
+            timeout=5 * 60,
+        )
 
         await modal_inter.response.defer(ephemeral=True)
 
         verification_code = modal_inter.text_values[text_input.custom_id]
         if not verification_code.isdigit():
-            await modal_inter.edit_original_response("Fuck you that's not a digit.")
+            await modal_inter.edit_original_response(
+                localisation.localise(
+                    "auth_bind_ak_invalid_vcode",
+                    locale=inter.locale,
+                    format_map={"code": verification_code},
+                ),
+            )
             return
 
         duffelbag_user = await auth.get_user_by_platform(
@@ -263,7 +265,7 @@ class ArknightsBindButton(components.RichButton):
         )
 
         await modal_inter.edit_original_response(
-            localisation.localise("auth_bind_arknights_success", locale=inter.locale),
+            localisation.localise("auth_bind_ak_success", locale=inter.locale),
         )
 
 
@@ -276,12 +278,12 @@ async def account_error_handler(
 
     This handles exceptions raised by `auth.recover_user`.
     """
+    exception = getattr(exception, "original", exception)
     _LOGGER.trace(
         "Handling auth exception of type %r for user %r.",
         type(exception).__name__,
         inter.author.id,
     )
-    exception = getattr(exception, "original", exception)
 
     params: dict[str, object] = {}
     msg_components: _MessageComponents = []
@@ -296,7 +298,7 @@ async def account_error_handler(
         case exceptions.DuffelbagUserExistsError(username=username):
             key = "exc_auth_dfb_exists_collapsed"
             msg_components.append(
-                restricted_manager.make_button(
+                manager.make_button(
                     "ExpBut",
                     key_base="exc_auth_dfb_exists",
                     params=[username],
@@ -353,7 +355,7 @@ async def _delayed_user_deletion(scheduled_deletion: database.ScheduledUserDelet
 
         except disnake.HTTPException:
             _LOGGER.warning(
-                "Failed to notify discord user with id %i of their Duffelbag account deletion.",
+                "Failed to notify Discord user with id %i of their Duffelbag account deletion.",
                 account.platform_id,
             )
 
@@ -361,7 +363,7 @@ async def _delayed_user_deletion(scheduled_deletion: database.ScheduledUserDelet
 
 
 def schedule_user_deletion(scheduled_deletion: database.ScheduledUserDeletion) -> None:
-    """Piss."""
+    """Create a user deletion background task for a provided ScheduledUserDeletion."""
     async_utils.safe_task(_delayed_user_deletion(scheduled_deletion))
 
 

@@ -49,8 +49,29 @@ def set_guest_client(guest_client: arkprts.Client) -> None:
 
 
 def get_network() -> arkprts.NetworkSession:
-    """Get the shared global arkprts NetworkSession."""
+    """Get the shared global arkprts NetworkSession.
+
+    Can only be used after a ClientSession was set using `set_session`.
+    """
     return get_guest_client().network
+
+
+async def make_user_client(
+    server: arkprts.ArknightsServer,
+    channel_uid: str,
+    token: str,
+) -> arkprts.Client:
+    """Make a new arkprts user Client with default configuration options.
+
+    Can only be used after a ClientSession was set using `set_session`.
+    """
+    return await arkprts.Client.from_token(
+        channel_uid=channel_uid,
+        token=token,
+        server=server,
+        network=get_network(),
+        assets=False,
+    )
 
 
 def get_user_client(server: arkprts.ArknightsServer, uid: str) -> arkprts.Client | None:

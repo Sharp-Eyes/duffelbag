@@ -656,14 +656,7 @@ async def add_arknights_account(
             is_own=duffelbag_user.id == existing_user.id,
         )
 
-    network = shared.get_network()
-    client = await arkprts.Client.from_token(
-        channel_uid,
-        token,
-        server=server,
-        network=network,
-        assets=False,
-    )
+    client = await shared.make_user_client(server, channel_uid, token)
     data = await client.get_data()
     game_uid = data.status.uid
 

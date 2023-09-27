@@ -27,5 +27,8 @@ jobs:
       - name: Install dependencies
         run: poetry install
 
+      - name: Update dependencies
+        run: poetry update
+
       - name: Run pyright
         run: poetry run pyright . --pythonversion 3.11

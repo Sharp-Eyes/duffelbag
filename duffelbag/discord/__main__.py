@@ -5,11 +5,13 @@ import importlib
 import pkgutil
 import typing
 
+import aiohttp
+import arkprts
 import disnake
 import uvloop
 from disnake.ext import commands, components
 
-from duffelbag import log
+from duffelbag import log, shared
 from duffelbag.discord import bot, config, exts, localisation, manager
 
 # Extensions.
@@ -38,6 +40,22 @@ def _discover_exts() -> typing.Generator[str, None, None]:
             yield module_info.name
 
 
+def _make_client_session() -> aiohttp.ClientSession:
+    session = aiohttp.ClientSession()
+
+    shared.set_session(session)
+    return session
+
+
+def _make_guest_client(session: aiohttp.ClientSession) -> arkprts.Client:
+    network = arkprts.NetworkSession("en", session=session)
+    auth = arkprts.GuestAuth(network=network)
+    client = arkprts.Client(auth=auth, assets=False)
+
+    shared.set_guest_client(client)
+    return client
+
+
 async def _main() -> None:
     duffelbag = bot.Duffelbag(
         intents=disnake.Intents.none(),
@@ -57,7 +75,10 @@ async def _main() -> None:
     for ext in _discover_exts():
         duffelbag.load_extension(ext)
 
-    await duffelbag.start(config.BOT_CONFIG.DISCORD_TOKEN)
+    async with _make_client_session() as session:
+        _make_guest_client(session)
+
+        await duffelbag.start(config.BOT_CONFIG.DISCORD_TOKEN)
 
 
 if __name__ == "__main__":

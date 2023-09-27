@@ -111,8 +111,6 @@ class ArknightsConnectionExistsError(AuthError):
     """The username of the Duffelbag account that made the request."""
     existing_username: str
     """The username of the existing Duffelbag account."""
-    email: str
-    """The email address of the existing Arknights account."""
     is_own: bool
     """Whether the Arknights account is registered to the same Duffelbag account."""
 

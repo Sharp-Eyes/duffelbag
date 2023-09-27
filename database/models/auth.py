@@ -41,9 +41,9 @@ class ArknightsUser(table.Table):
     user = columns.ForeignKey(DuffelbagUser)
     channel_uid = columns.Varchar(16)
     yostar_token = columns.Varchar(32)
-    email = columns.Email()
     server = columns.Varchar(4)
     active = columns.Boolean()
+    game_uid = columns.Varchar(8)  # TODO: Validate whether 8 is enough
 
     # NOTE: As of migration 2023-05-31T10:47:00:954167, there is a composite
     #       unique constraint on (channel_uid, yostar_token) with name

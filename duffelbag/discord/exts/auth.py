@@ -5,12 +5,13 @@ import datetime
 import re
 import typing
 
+import arkprts
 import disnake
 from disnake.ext import commands, components, plugins
 from disnake.ext.components import interaction as interaction_
 
 import database
-from duffelbag import async_utils, auth, exceptions, log
+from duffelbag import async_utils, auth, exceptions, log, shared
 from duffelbag.discord import localisation
 
 _LOGGER = log.get_logger(__name__)
@@ -22,17 +23,18 @@ _EMAIL_REGEX: typing.Final[typing.Pattern[str]] = re.compile(
 # TODO: Expose a type like this in ext-components somewhere
 _MessageComponents = interaction_.Components[interaction_.MessageComponents]
 
+_ServerToApiUserDict = dict[arkprts.ArknightsServer, typing.Sequence[arkprts.models.PartialPlayer]]
 
 plugin = plugins.Plugin()
 manager = components.get_manager("duffelbag")
 
 
-@plugin.slash_command()
-async def account(_: disnake.CommandInteraction) -> None:
+@plugin.slash_command(name="account")
+async def account_(_: disnake.CommandInteraction) -> None:
     """Do stuff with accounts."""
 
 
-@account.sub_command_group(name="duffelbag")  # pyright: ignore
+@account_.sub_command_group(name="duffelbag")  # pyright: ignore
 async def account_duffelbag(_: disnake.CommandInteraction) -> None:
     """Do stuff with Duffelbag accounts."""
 
@@ -137,7 +139,7 @@ async def account_duffelbag_delete(
     )
 
 
-@account.sub_command_group(name="discord")  # pyright: ignore
+@account_.sub_command_group(name="discord")  # pyright: ignore
 async def account_discord(_: disnake.CommandInteraction) -> None:
     """Do stuff with a Discord account."""
 
@@ -170,7 +172,7 @@ async def account_discord_bind(
     )
 
 
-@account.sub_command_group(name="arknights")  # pyright: ignore
+@account_.sub_command_group(name="arknights")  # pyright: ignore
 async def account_arknights(_: disnake.CommandInteraction) -> None:
     """Do stuff with an Arknights account."""
 
@@ -178,8 +180,8 @@ async def account_arknights(_: disnake.CommandInteraction) -> None:
 @account_arknights.sub_command(name="bind")  # pyright: ignore
 async def account_arknights_bind(
     inter: disnake.CommandInteraction,
-    server: auth.ArknightsServer = commands.Param(converter=lambda _, v: auth.ArknightsServer(v)),
-    email: str = commands.Param(),
+    server: arkprts.ArknightsServer,
+    email: str,
 ) -> None:
     """Bind an Arknights account to your Duffelbag account."""
     await inter.response.defer(ephemeral=True)
@@ -188,13 +190,7 @@ async def account_arknights_bind(
         msg = f"The provided email address {email!r} is not a valid email address."
         raise exceptions.InvalidEmailError(msg, email=email)
 
-    duffelbag_user = await auth.get_user_by_platform(
-        platform=auth.Platform.DISCORD,
-        platform_id=inter.author.id,
-        strict=True,
-    )
-
-    await auth.start_authentication(duffelbag_user, server=server, email=email)
+    await auth.start_authentication(server=server, email=email)
 
     button = ArknightsBindButton(
         label=localisation.localise("auth_bind_ak_title", locale=inter.locale),
@@ -203,7 +199,6 @@ async def account_arknights_bind(
     )
 
     wrapped = components.wrap_interaction(inter)
-
     await wrapped.edit_original_message(
         localisation.localise(
             "auth_bind_ak",
@@ -226,14 +221,41 @@ async def account_arknights_set_active(inter: disnake.CommandInteraction) -> Non
     )
     arknights_accounts = await auth.list_arknights_accounts(duffelbag_user)
 
-    options = [
-        disnake.SelectOption(
-            label=f"{ak.email} [{ak.server}]",
-            value=f"{ak.email}{ArknightsActiveAccountSelect.sep}{ak.server}",
-            default=ak.active,
-        )
-        for ak in arknights_accounts
-    ]
+    accounts_by_server: dict[arkprts.ArknightsServer, list[database.ArknightsUser]] = {}
+    for account in arknights_accounts:
+        server = typing.cast(arkprts.ArknightsServer, account.server)
+        if server not in accounts_by_server:
+            accounts_by_server[server] = []
+
+        accounts_by_server[server].append(account)
+
+    guest_client = shared.get_guest_client()
+    users_by_server: _ServerToApiUserDict = dict(
+        zip(  # Recombine asyncio.gather output with accounts_by_server keys.
+            accounts_by_server,
+            await asyncio.gather(
+                *[
+                    guest_client.get_partial_players(
+                        [account.game_uid for account in accounts],
+                        server=server,
+                    )
+                    for server, accounts in accounts_by_server.items()
+                ],
+            ),
+            strict=True,
+        ),
+    )
+
+    options: list[disnake.SelectOption] = []
+    for server, accounts in accounts_by_server.items():
+        user_data = users_by_server[server]
+        for account, user in zip(accounts, user_data, strict=True):
+            options.append(
+                ArknightsActiveAccountSelect.make_option_from_account(
+                    account,
+                    display_name=f"{user.nickname}#{user.nick_number}",
+                ),
+            )
 
     wrapped = components.wrap_interaction(inter)
     await wrapped.edit_original_response(
@@ -249,8 +271,8 @@ class ArknightsBindButton(components.RichButton):
     label: str
     style: disnake.ButtonStyle = disnake.ButtonStyle.success
 
-    server: auth.ArknightsServer = components.field(
-        parser=components.parser.EnumParser(auth.ArknightsServer),
+    server: arkprts.ArknightsServer = components.field(
+        parser=components.parser.StringParser,  # pyright: ignore  # TODO: implement literal parser
     )
     email: str
 
@@ -320,14 +342,32 @@ class ArknightsActiveAccountSelect(components.RichStringSelect):
     min_values: int = 1
     max_values: int = 1
 
+    @classmethod
+    def make_option_from_account(
+        cls,
+        account: database.ArknightsUser,
+        display_name: str | None = None,
+    ) -> disnake.SelectOption:
+        """Make a SelectOption for this select given an ArknightsUser."""
+        if not display_name:
+            display_name = account.game_uid
+
+        return disnake.SelectOption(
+            label=f"{display_name} [{account.server}]",
+            value=f"{account.game_uid}{cls.sep}{account.server}",
+            default=account.active,
+        )
+
     async def callback(self, inter: components.MessageInteraction) -> None:
         """Select an Arknights account to mark as active."""
         assert inter.values  # min_values is 1 so cannot be none.
 
-        email, server = inter.values[0].split(self.sep)
-        server = auth.ArknightsServer(server)
+        server, game_uid = inter.values[0].split(self.sep)
 
-        arknights_user = await auth.get_arknights_account_by_server_email(server, email)
+        arknights_user = await auth.get_arknights_account_by_server_uid(
+            typing.cast(arkprts.ArknightsServer, server),
+            game_uid,
+        )
         await auth.set_active_arknights_account(arknights_user)
 
         await inter.response.edit_message(
@@ -336,7 +376,7 @@ class ArknightsActiveAccountSelect(components.RichStringSelect):
         )
 
 
-@account.error  # pyright: ignore
+@account_.error  # pyright: ignore
 async def account_error_handler(
     inter: disnake.Interaction,
     exception: commands.CommandInvokeError,

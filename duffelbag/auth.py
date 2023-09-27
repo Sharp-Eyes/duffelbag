@@ -12,7 +12,7 @@ import arkprts
 import asyncpg
 
 import database
-from duffelbag import exceptions
+from duffelbag import exceptions, shared
 
 # Ensure passwords are hashed at the correct length. Should be 32 chars.
 _HASHER = argon2.PasswordHasher(hash_len=32)
@@ -24,29 +24,22 @@ DELETION_GRACE_PERIOD_SECONDS = 24 * 3600
 
 USER_PATTERN = re.compile(r"[a-zA-Z0-9\-_]{4,32}")
 
-
-class ArknightsServer(enum.Enum):
-    """Arknights server to which an account is registered."""
-
-    EN = "en"
-    JP = "jp"
-    KR = "kr"
-
-    # TODO: implement auth for CN/Bilibili(/TW)
-    # CN = "cn"  # noqa: ERA001
-    # BILI = "bili"  # noqa: ERA001
-    # TW = "tw"  # noqa: ERA001
+_VALID_SERVERS = frozenset(arkprts.network.NETWORK_ROUTES)
 
 
-_AUTH_MAP = {
-    ArknightsServer.EN: arkprts.YostarAuth("en"),
-    ArknightsServer.JP: arkprts.YostarAuth("jp"),
-    ArknightsServer.KR: arkprts.YostarAuth("kr"),
-    # TODO: implement auth for CN/Bilibili(/TW)
-    # ArknightsServer.CN: arkprts.HypergryphAuth(),
-    # ArknightsServer.BILI: arkprts.BilibiliAuth(),
-    # ArknightsServer.TW: arkprts.auth.LongchengAuth(),
-}
+def _get_auth(server: arkprts.ArknightsServer) -> arkprts.Auth:
+    network = shared.get_network()
+
+    if server in ("en", "jp", "kr"):
+        auth = arkprts.YostarAuth(server, network=network)
+
+    # TODO: Support CN/Bilibili/TW
+
+    else:
+        msg = f"Server {server!r} is not supported."
+        raise RuntimeError(msg)
+
+    return auth
 
 
 class Platform(enum.Enum):
@@ -522,20 +515,13 @@ async def list_connected_accounts(
 # database.ArknightsUser manipulation...
 
 
-async def _recover_user_by_email(*, email: str) -> database.DuffelbagUser | None:
-    joined = database.DuffelbagUser.id.join_on(database.ArknightsUser.user)
-
-    return await (
-        database.DuffelbagUser.objects()
-        .where(joined.email == email)
-        .first()
-    )  # fmt: skip
+def validate_server(server: str) -> typing.TypeGuard[arkprts.ArknightsServer]:
+    """Check whether a string is a valid Arknights server."""
+    return server in _VALID_SERVERS
 
 
 async def start_authentication(
-    duffelbag_user: database.DuffelbagUser,
-    *,
-    server: ArknightsServer,
+    server: arkprts.ArknightsServer,
     email: str,
 ) -> None:
     """Start the authentication process to register a new Arknights account to a Duffelbag account.
@@ -566,28 +552,19 @@ async def start_authentication(
     :class:`exceptions.ArknightsConnectionExists`
         The Arknights account is already registered to a Duffelbag account.
     """
-    existing_user = await _recover_user_by_email(email=email)
-    if existing_user:
-        msg = (
-            f"The arknights account with email address {email!r} is already"
-            " registered to a Duffelbag user."
-        )
-        raise exceptions.ArknightsConnectionExistsError(
-            msg,
-            username=duffelbag_user.username,
-            existing_username=existing_user.username,
-            email=email,
-            is_own=existing_user.id == duffelbag_user.id,
-        )
-
     # This sends the authentication email to the user.
-    await _AUTH_MAP[server].get_token_from_email_code(email)
+    auth = _get_auth(server)
+    if isinstance(auth, arkprts.YostarAuth):
+        await auth.get_token_from_email_code(email)
+
+    else:
+        raise NotImplementedError  # TODO: do.
 
 
 async def complete_authentication(
     duffelbag_user: database.DuffelbagUser,
     *,
-    server: ArknightsServer,
+    server: arkprts.ArknightsServer,
     email: str,
     verification_code: str,
 ) -> database.ArknightsUser:
@@ -614,13 +591,17 @@ async def complete_authentication(
         The Arknights account is already registered to a Duffelbag account.
     """
     # This finalises the authentication process.
-    uid, token = await _AUTH_MAP[server].get_token_from_email_code(email, verification_code)
+    auth = _get_auth(server)
+    if isinstance(auth, arkprts.YostarAuth):
+        channel_uid, token = await auth.get_token_from_email_code(email, verification_code)
+
+    else:
+        raise NotImplementedError  # TODO: do. Yes.
 
     return await add_arknights_account(
         duffelbag_user,
-        uid=uid,
+        channel_uid=channel_uid,
         token=token,
-        email=email,
         server=server,
     )
 
@@ -628,10 +609,9 @@ async def complete_authentication(
 async def add_arknights_account(
     duffelbag_user: database.DuffelbagUser,
     *,
-    uid: str,
+    channel_uid: str,
     token: str,
-    email: str,
-    server: ArknightsServer,
+    server: arkprts.ArknightsServer,
 ) -> database.ArknightsUser:
     """Add an Arknights account to an existing Duffelbag account.
 
@@ -640,7 +620,7 @@ async def add_arknights_account(
     duffelbag_user:
         An existing Duffelbag account. This should be acquired using
         :func:`login_user`.
-    uid:
+    channel_uid:
         The Arknights channel uid for account that is to be added.
     token:
         The Yostar token for the account that is to be added.
@@ -659,7 +639,29 @@ async def add_arknights_account(
     :class:`exceptions.ArknightsConnectionExists`
         The Arknights account is already registered to a Duffelbag account.
     """
-    exists: bool = await (
+    joined = database.DuffelbagUser.id.join_on(database.ArknightsUser.user)
+
+    existing_user = await (
+        database.DuffelbagUser.objects()  # pyright: ignore
+        .where((joined.channel_uid == channel_uid) & (joined.yostar_token == token))
+        .first()
+    )  # fmt: skip
+
+    if existing_user:
+        msg = "This Arknights user is already registered to a different Duffelbag account."
+        raise exceptions.ArknightsConnectionExistsError(
+            msg,
+            username=duffelbag_user.username,
+            existing_username=existing_user.username,
+            is_own=duffelbag_user.id == existing_user.id,
+        )
+
+    network = shared.get_network()
+    client = await arkprts.Client.from_token(channel_uid, token, server=server, network=network)
+    data = await client.get_data()
+    game_uid = data.status.uid
+
+    active_account_exists: bool = await (
         database.ArknightsUser.exists()  # pyright: ignore
         .where(
             (database.ArknightsUser.user == duffelbag_user.id)
@@ -669,34 +671,15 @@ async def add_arknights_account(
 
     new_user = database.ArknightsUser(
         user=duffelbag_user.id,
-        channel_uid=uid,
+        channel_uid=channel_uid,
         yostar_token=token,
-        email=email,
+        game_uid=game_uid,
         server=server,
-        active=not exists,  # Set active if no other active account exists
+        active=not active_account_exists,
     )
 
-    try:
-        await database.ArknightsUser.insert(new_user)
-
-    except asyncpg.UniqueViolationError as exc:
-        await database.rollback_transaction()
-
-        existing_user = await _recover_user_by_email(email=email)
-
-        assert existing_user
-
-        msg = "This Arknights user is already registered to a different Duffelbag account."
-        raise exceptions.ArknightsConnectionExistsError(
-            msg,
-            username=duffelbag_user.username,
-            existing_username=existing_user.username,
-            email=new_user.email,
-            is_own=duffelbag_user.id == existing_user.id,
-        ) from exc
-
-    else:
-        return new_user
+    await database.ArknightsUser.insert(new_user)
+    return new_user
 
 
 async def remove_arknights_account() -> typing.NoReturn:
@@ -807,27 +790,30 @@ async def set_active_arknights_account(
         await arknights_user.save(columns=[database.ArknightsUser.active])  # pyright: ignore
 
 
-async def get_arknights_account_by_server_email(
-    server: ArknightsServer,
-    email: str,
+async def get_arknights_account_by_server_uid(
+    server: arkprts.ArknightsServer,
+    game_uid: str,
 ) -> database.ArknightsUser:
-    """Get an Arknights account by server and email.
+    """Get an Arknights account by server and uid.
 
     Parameters
     ----------
     server:
         The server on which the Arknights account is registered.
-    email:
-        The email address to register to the account.
+    game_uid:
+        The arknights UID with which the account is registered.
     """
     arknights_user = await (
         database.ArknightsUser.objects()
-        .where((database.ArknightsUser.server == server) & (database.ArknightsUser.email == email))
+        .where(
+            (database.ArknightsUser.server == server)
+            & (database.ArknightsUser.game_uid == game_uid),
+        )
         .first()
     )
 
     if arknights_user:
         return arknights_user
 
-    msg = f"There is no registered user on server {server.value!r} with email {email!r}."
+    msg = f"There is no registered user on server {server!r} with UID {game_uid!r}."
     raise exceptions.LoginError(msg, account_type="Arknights")

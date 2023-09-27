@@ -58,7 +58,7 @@ def localise(
     locale: disnake.Locale | str,
     *,
     strict: bool = True,
-    format_map: typing.Mapping[str, object] | None = None,
+    format_map: dict[str, object] | None = None,
 ) -> str:
     """Get a localised string with the provided key and locale.
 

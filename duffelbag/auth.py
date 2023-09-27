@@ -657,7 +657,13 @@ async def add_arknights_account(
         )
 
     network = shared.get_network()
-    client = await arkprts.Client.from_token(channel_uid, token, server=server, network=network)
+    client = await arkprts.Client.from_token(
+        channel_uid,
+        token,
+        server=server,
+        network=network,
+        assets=False,
+    )
     data = await client.get_data()
     game_uid = data.status.uid
 

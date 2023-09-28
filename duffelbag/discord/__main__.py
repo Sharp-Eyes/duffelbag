@@ -56,11 +56,25 @@ def _make_guest_client(session: aiohttp.ClientSession) -> arkprts.Client:
     return client
 
 
+def _make_intents() -> disnake.Intents:
+    if config.BOT_CONFIG.DISCORD_IS_PROD:
+        return disnake.Intents.none()
+
+    return disnake.Intents.messages | disnake.Intents.guild_messages
+
+
+def _make_sync_flags() -> commands.CommandSyncFlags:
+    if config.BOT_CONFIG.DISCORD_IS_PROD:
+        return commands.CommandSyncFlags.default()
+
+    return commands.CommandSyncFlags.default() | commands.CommandSyncFlags.sync_commands_debug
+
+
 async def _main() -> None:
     duffelbag = bot.Duffelbag(
-        intents=disnake.Intents.none(),
+        intents=_make_intents(),
         reload=not config.BOT_CONFIG.DISCORD_IS_PROD,
-        sync_commands_debug=not config.BOT_CONFIG.DISCORD_IS_PROD,
+        command_sync_flags=_make_sync_flags(),
     )
 
     root_manager = components.get_manager()

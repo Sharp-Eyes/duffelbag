@@ -15,6 +15,7 @@ import re
 import sys
 import textwrap
 import traceback
+import types
 import typing
 
 import disnake
@@ -22,9 +23,6 @@ from disnake.ext import commands, plugins
 
 import database
 from duffelbag.discord import config
-
-if typing.TYPE_CHECKING:
-    import types
 
 _valid_ids: set[int] = set()
 
@@ -80,7 +78,8 @@ async def _eval_py(code: str, env: dict[str, object]) -> str:
         )
 
         with contextlib.redirect_stdout(sio):
-            result = exec(compiled, env)  # noqa: S102
+            f = types.FunctionType(compiled, env)
+            result = f()
             if inspect.isawaitable(result):
                 result = await result
 

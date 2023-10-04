@@ -72,6 +72,25 @@ class DuffelbagDeletionNotQueuedError(AuthError):
 
 
 @attrs.define(auto_exc=True, slots=False, init=True)
+class ArknightsDeletionAlreadyQueuedError(AuthError):
+    """A user tried to delete an Arknights account that is already scheduled for deletion."""
+
+    username: str
+    """The username of the Duffelbag account."""
+    game_uid: str
+    """The UID of the Arknights account."""
+    server: str
+    """The server on which the Arknights account is registered."""
+    deletion_ts: datetime.datetime
+    """The timestamp at which the Duffelbag account is to be deleted."""
+
+
+@attrs.define(auto_exc=True, slots=False, init=True)
+class ArknightsDeletionNotQueuedError(AuthError):
+    """Tried to get an Arknights account that is not scheduled for deletion."""
+
+
+@attrs.define(auto_exc=True, slots=False, init=True)
 class DuffelbagConnectionNotFoundError(AuthError):
     """Could not find a duffelbag account for a given platform account."""
 

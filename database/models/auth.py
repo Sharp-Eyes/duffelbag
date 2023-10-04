@@ -51,7 +51,7 @@ class ArknightsUser(table.Table):
 
 
 class ScheduledUserDeletion(table.Table):
-    """The database representation of a scheduled user deletion.
+    """The database representation of a scheduled Duffelbag user deletion.
 
     If a user no longer shares any guilds with the bot or requests that their
     account be deleted, deletion will be scheduled in the near future.
@@ -61,4 +61,17 @@ class ScheduledUserDeletion(table.Table):
 
     id: columns.Serial
     user = columns.ForeignKey(DuffelbagUser, unique=True)
+    deletion_ts = columns.Timestamptz()
+
+
+class ScheduledArknightsUserDeletion(table.Table):
+    """The database representation of a scheduled Arknights user deletion.
+
+    This is a one (DuffelbagUser) to many (ScheduledArknightsUserDeletion)
+    and one (ArknightsUser) to one (ScheduledArknightsUserDeletion) relation.
+    """
+
+    id: columns.Serial
+    user = columns.ForeignKey(DuffelbagUser)
+    arknights_user = columns.ForeignKey(ArknightsUser, unique=True)
     deletion_ts = columns.Timestamptz()

@@ -14,6 +14,8 @@ import asyncpg
 import database
 from duffelbag import exceptions, shared
 
+_AnyScheduledDeletion = database.ScheduledUserDeletion | database.ScheduledArknightsUserDeletion
+
 # Ensure passwords are hashed at the correct length. Should be 32 chars.
 _HASHER = argon2.PasswordHasher(hash_len=32)
 MIN_PASS_LEN = 8
@@ -190,8 +192,6 @@ async def login_user(*, username: str, password: str) -> database.DuffelbagUser:
 
 async def schedule_user_deletion(
     duffelbag_user: database.DuffelbagUser,
-    *,
-    password: str,
 ) -> database.ScheduledUserDeletion:
     """Schedule an existing Duffelbag account and all related user information for deletion.
 
@@ -203,9 +203,12 @@ async def schedule_user_deletion(
         The Duffelbag user that is to be marked for deletion.
     password:
         The password of the duffelbag user that is to be deleted.
-    """
-    verify_password(duffelbag_user=duffelbag_user, password=password)
 
+    Raises
+    ------
+    UserDeletionAlreadyQueuedError:
+        The provided Duffelbag account is already scheduled for removal.
+    """
     now = datetime.datetime.now(datetime.UTC)
     deletion_ts = now + datetime.timedelta(seconds=DELETION_GRACE_PERIOD_SECONDS)
 
@@ -240,13 +243,80 @@ async def schedule_user_deletion(
     return scheduled_deletion
 
 
+async def schedule_arknights_user_deletion(
+    duffelbag_user: database.DuffelbagUser,
+    arknights_user: database.ArknightsUser,
+) -> database.ScheduledArknightsUserDeletion:
+    """Schedule an existing Arknights account and all related user information for deletion.
+
+    The account will be deleted after a grace period.
+
+    Parameters
+    ----------
+    duffelbag_user:
+        The Duffelbag to which the arknights account belongs.
+    arknights_user:
+        The Arknights user that is to be marked for deletion.
+    password:
+        The password of the duffelbag user that is to be deleted.
+
+    Raises
+    ------
+    ArknightsDeletionAlreadyQueuedError:
+        The provided Arknights account is already scheduled for removal.
+    """
+    now = datetime.datetime.now(datetime.UTC)
+    deletion_ts = now + datetime.timedelta(seconds=DELETION_GRACE_PERIOD_SECONDS)
+
+    scheduled_deletion = database.ScheduledArknightsUserDeletion(
+        user=duffelbag_user.id,
+        arknights_user=arknights_user.id,
+        deletion_ts=deletion_ts,
+    )
+    try:
+        await database.ScheduledArknightsUserDeletion.insert(scheduled_deletion)
+    except asyncpg.UniqueViolationError as exc:
+        await database.rollback_transaction()
+
+        existing_deletion = await (
+            database.ScheduledArknightsUserDeletion.objects()
+            .where(database.ScheduledArknightsUserDeletion.arknights_user == arknights_user.id)
+            .first()
+        )  # fmt: skip
+
+        assert existing_deletion
+
+        msg = (
+            f"Duffelbag user with id {duffelbag_user.id} attempted to delete"
+            f" their Arknights account with uid {arknights_user.game_uid} on"
+            f" server {arknights_user.server}, but it is already scheduled for"
+            f" deletion at {existing_deletion.deletion_ts}."
+        )
+        raise exceptions.ArknightsDeletionAlreadyQueuedError(
+            msg,
+            username=duffelbag_user.username,
+            game_uid=arknights_user.game_uid,
+            server=arknights_user.server,
+            deletion_ts=existing_deletion.deletion_ts,
+        ) from exc
+
+    return scheduled_deletion
+
+
 async def get_scheduled_user_deletions() -> typing.Sequence[database.ScheduledUserDeletion]:
-    """Get all scheduled user deletions."""
+    """Get all scheduled Duffelbag user deletions."""
     return await database.ScheduledUserDeletion.objects()
 
 
+async def get_scheduled_arknights_user_deletions() -> typing.Sequence[
+    database.ScheduledArknightsUserDeletion
+]:
+    """Get all scheduled Arknights user deletions."""
+    return await database.ScheduledArknightsUserDeletion.objects()
+
+
 async def get_scheduled_user_deletion_user(
-    scheduled_user_deletion: database.ScheduledUserDeletion,
+    scheduled_user_deletion: _AnyScheduledDeletion,
 ) -> database.DuffelbagUser:
     """Get the duffelbag user that is to be deleted."""
     duffelbag_user = await (
@@ -263,6 +333,29 @@ async def get_scheduled_user_deletion_user(
         raise exceptions.DuffelbagDeletionNotQueuedError(msg)
 
     return duffelbag_user
+
+
+async def get_scheduled_arknights_user_deletion_users(
+    scheduled_user_deletion: database.ScheduledArknightsUserDeletion,
+) -> tuple[database.DuffelbagUser, database.ArknightsUser]:
+    """Get the duffelbag user that is to be deleted."""
+    arknights_user = await (
+        database.ArknightsUser.objects()
+        .where(database.ArknightsUser.id == scheduled_user_deletion.arknights_user)
+        .first()
+    )
+
+    if not arknights_user:
+        msg = (
+            f"Arknights user with id {scheduled_user_deletion.arknights_user} is not"
+            " scheduled for deletion."
+        )
+        raise exceptions.ArknightsDeletionNotQueuedError(msg)
+
+    return (
+        await get_scheduled_user_deletion_user(scheduled_user_deletion),
+        arknights_user,
+    )
 
 
 @typing.overload
@@ -681,15 +774,9 @@ async def add_arknights_account(
     return new_user
 
 
-async def remove_arknights_account() -> typing.NoReturn:
+async def remove_arknights_account(arknights_user: database.ArknightsUser) -> None:
     """Remove an arknights account from the provided Duffelbag account."""
-    # TODO: Figure out how to implement this. Either we need to make emails
-    #       required, or we'd need to loop over every account, fetch the ingame
-    #       username, and use that instead?
-    #       Either way, we need some way for the user to tell which account is
-    #       theirs.
-
-    raise NotImplementedError
+    await arknights_user.remove()
 
 
 async def list_arknights_accounts(

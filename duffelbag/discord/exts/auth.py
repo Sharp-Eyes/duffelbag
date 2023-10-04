@@ -12,7 +12,7 @@ from disnake.ext.components import interaction as interaction_
 
 import database
 from duffelbag import async_utils, auth, exceptions, log, shared
-from duffelbag.discord import localisation
+from duffelbag.discord import component_base, localisation
 
 _LOGGER = log.get_logger(__name__)
 _EMAIL_REGEX: typing.Final[typing.Pattern[str]] = re.compile(
@@ -23,10 +23,11 @@ _EMAIL_REGEX: typing.Final[typing.Pattern[str]] = re.compile(
 # TODO: Expose a type like this in ext-components somewhere
 _MessageComponents = interaction_.Components[interaction_.MessageComponents]
 
-_ServerToApiUserDict = dict[arkprts.ArknightsServer, typing.Sequence[arkprts.models.PartialPlayer]]
-
 plugin = plugins.Plugin()
-manager = components.get_manager("duffelbag")
+manager = components.get_manager("duffelbag.auth")
+
+
+# Account manipulation commands.
 
 
 @plugin.slash_command(name="account")
@@ -124,7 +125,9 @@ async def account_duffelbag_delete(
         strict=True,
     )
 
-    scheduled_deletion = await auth.schedule_user_deletion(duffelbag_user, password=password)
+    auth.verify_password(duffelbag_user=duffelbag_user, password=password)
+
+    scheduled_deletion = await auth.schedule_user_deletion(duffelbag_user)
     schedule_user_deletion(scheduled_deletion)
 
     await inter.response.send_message(
@@ -219,49 +222,40 @@ async def account_arknights_set_active(inter: disnake.CommandInteraction) -> Non
         platform_id=inter.author.id,
         strict=True,
     )
-    arknights_accounts = await auth.list_arknights_accounts(duffelbag_user)
-
-    accounts_by_server: dict[arkprts.ArknightsServer, list[database.ArknightsUser]] = {}
-    for account in arknights_accounts:
-        server = typing.cast(arkprts.ArknightsServer, account.server)
-        if server not in accounts_by_server:
-            accounts_by_server[server] = []
-
-        accounts_by_server[server].append(account)
-
-    guest_client = shared.get_guest_client()
-    users_by_server: _ServerToApiUserDict = dict(
-        zip(  # Recombine asyncio.gather output with accounts_by_server keys.
-            accounts_by_server,
-            await asyncio.gather(
-                *[
-                    guest_client.get_partial_players(
-                        [account.game_uid for account in accounts],
-                        server=server,
-                    )
-                    for server, accounts in accounts_by_server.items()
-                ],
-            ),
-            strict=True,
-        ),
-    )
-
-    options: list[disnake.SelectOption] = []
-    for server, accounts in accounts_by_server.items():
-        user_data = users_by_server[server]
-        for account, user in zip(accounts, user_data, strict=True):
-            options.append(
-                ArknightsActiveAccountSelect.make_option_from_account(
-                    account,
-                    display_name=f"{user.nickname}#{user.nick_number}",
-                ),
-            )
+    component = await ArknightsActiveAccountSelect.for_duffelbag_user(duffelbag_user)
 
     wrapped = components.wrap_interaction(inter)
     await wrapped.edit_original_response(
         localisation.localise("auth_ak_set_active", inter.locale),
-        components=[ArknightsActiveAccountSelect(options=options)],
+        components=[component],
     )
+
+
+@account_arknights.sub_command(name="unbind")  # pyright: ignore
+async def account_arknights_unbind(
+    inter: disnake.CommandInteraction,
+    password: str = _PASS_PARAM,
+) -> None:
+    """Unlink your Arknights account. This has a 24 hour grace period."""
+    duffelbag_user = await auth.get_user_by_platform(
+        platform=auth.Platform.DISCORD,
+        platform_id=inter.author.id,
+        strict=True,
+    )
+
+    auth.verify_password(duffelbag_user=duffelbag_user, password=password)
+
+    component = await ArknightsRemoveAccountSelect.for_duffelbag_user(duffelbag_user)
+
+    wrapped = components.wrap_interaction(inter)
+    await wrapped.response.send_message(
+        localisation.localise("auth_ak_remove_msg", inter.locale),
+        components=[component],
+        ephemeral=True,
+    )
+
+
+# Account manipulation components.
 
 
 @manager.register(identifier="ArkBind")
@@ -334,40 +328,12 @@ class ArknightsBindButton(components.RichButton):
 
 
 @manager.register(identifier="ArkActive")
-class ArknightsActiveAccountSelect(components.RichStringSelect):
+class ArknightsActiveAccountSelect(component_base.ArknightsAccountSelect):
     """Select menu to set a user's active Arknights account."""
-
-    sep: typing.ClassVar[str] = "|"
-
-    min_values: int = 1
-    max_values: int = 1
-
-    @classmethod
-    def make_option_from_account(
-        cls,
-        account: database.ArknightsUser,
-        display_name: str | None = None,
-    ) -> disnake.SelectOption:
-        """Make a SelectOption for this select given an ArknightsUser."""
-        if not display_name:
-            display_name = account.game_uid
-
-        return disnake.SelectOption(
-            label=f"{display_name} [{account.server}]",
-            value=f"{account.game_uid}{cls.sep}{account.server}",
-            default=account.active,
-        )
 
     async def callback(self, inter: components.MessageInteraction) -> None:
         """Select an Arknights account to mark as active."""
-        assert inter.values  # min_values is 1 so cannot be none.
-
-        server, game_uid = inter.values[0].split(self.sep)
-
-        arknights_user = await auth.get_arknights_account_by_server_uid(
-            typing.cast(arkprts.ArknightsServer, server),
-            game_uid,
-        )
+        arknights_user = await self.get_selected_user(inter)
         await auth.set_active_arknights_account(arknights_user)
 
         await inter.response.edit_message(
@@ -376,15 +342,42 @@ class ArknightsActiveAccountSelect(components.RichStringSelect):
         )
 
 
+@manager.register(identifier="ArkDelete")
+class ArknightsRemoveAccountSelect(component_base.ArknightsAccountSelect):
+    """Select menu to remove a user's Arknights account from the bot."""
+
+    async def callback(self, inter: components.MessageInteraction) -> None:
+        """Select an Arknights account to unlink."""
+        arknights_user = await self.get_selected_user(inter)
+        duffelbag_user = await auth.get_user_by_platform(
+            platform=auth.Platform.DISCORD,
+            platform_id=inter.author.id,
+            strict=True,
+        )
+
+        scheduled_deletion = await auth.schedule_arknights_user_deletion(
+            duffelbag_user,
+            arknights_user,
+        )
+
+        schedule_user_deletion(scheduled_deletion)
+
+        await inter.response.edit_message(
+            localisation.localise(
+                "auth_ak_remove_schedule",
+                locale=inter.locale,
+                format_map={"timestamp": scheduled_deletion.deletion_ts},
+            ),
+            components=None,
+        )
+
+
 @account_.error  # pyright: ignore
 async def account_error_handler(
     inter: disnake.Interaction,
-    exception: commands.CommandInvokeError,
+    exception: Exception,
 ) -> typing.Literal[True]:
-    """Handle invalid recovery attempts.
-
-    This handles exceptions raised by `auth.recover_user`.
-    """
+    """Handle any kind of authentication exception."""
     exception = getattr(exception, "original", exception)
     _LOGGER.trace(
         "Handling auth exception of type %r for user %r.",
@@ -429,6 +422,14 @@ async def account_error_handler(
         case exceptions.ArknightsConnectionExistsError(is_own=is_own):
             key = "exc_auth_ak_exists_self" if is_own else "exc_auth_ak_exists"
 
+        case exceptions.DuffelbagDeletionAlreadyQueuedError():
+            key = "exc_auth_dfb_remove_exists"
+            params["timestamp"] = disnake.utils.format_dt(exception.deletion_ts, "R")
+
+        case exceptions.ArknightsDeletionAlreadyQueuedError():
+            key = "exc_auth_ak_remove_exists"
+            params["timestamp"] = disnake.utils.format_dt(exception.deletion_ts, "R")
+
         case _:
             _LOGGER.trace("Exception went unhandled in local error handler.")
             raise
@@ -444,6 +445,26 @@ async def account_error_handler(
 
     _LOGGER.trace("Exception handled successfully in local error handler.")
     return True
+
+
+@manager.as_exception_handler
+async def handle_component_exception(
+    _manager: components.ComponentManager,
+    _component: components.api.RichComponent,
+    inter: disnake.Interaction,
+    exception: Exception,
+) -> bool:
+    """Handle auth component exceptions.
+
+    This passes exceptions to the above exception handler.
+    """
+    try:
+        return await account_error_handler(inter, exception)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# User deletion task scheduling.
 
 
 async def _delayed_user_deletion(scheduled_deletion: database.ScheduledUserDeletion) -> None:
@@ -473,17 +494,64 @@ async def _delayed_user_deletion(scheduled_deletion: database.ScheduledUserDelet
     await duffelbag_user.remove()
 
 
-def schedule_user_deletion(scheduled_deletion: database.ScheduledUserDeletion) -> None:
+async def _delayed_arknights_user_deletion(
+    scheduled_deletion: database.ScheduledArknightsUserDeletion,
+) -> None:
+    timedelta = scheduled_deletion.deletion_ts - datetime.datetime.now(tz=datetime.UTC)
+    await asyncio.sleep(timedelta.total_seconds())
+
+    duffelbag_user, arknights_user = await auth.get_scheduled_arknights_user_deletion_users(
+        scheduled_deletion,
+    )
+    accounts = await auth.list_connected_accounts(duffelbag_user, platform=auth.Platform.DISCORD)
+
+    guest_client = shared.get_guest_client()
+    arknights_account = (
+        await guest_client.get_partial_players(
+            [arknights_user.game_uid],
+            server=typing.cast(arkprts.ArknightsServer, arknights_user.server),
+        )
+    )[0]
+    display_name = f"{arknights_account.nickname}#{arknights_account.nick_number}"
+
+    for account in accounts:
+        try:
+            user = await plugin.bot.get_or_fetch_user(account.platform_id, strict=True)
+            await user.send(
+                localisation.localise(
+                    "auth_ak_remove_success",
+                    disnake.Locale.en_GB,  # TODO: figure out some way of getting locale information
+                    format_map={"username": display_name},
+                ),
+            )
+
+        except disnake.HTTPException:
+            _LOGGER.warning(
+                "Failed to notify Discord user with id %i of their Arknights account deletion.",
+                account.platform_id,
+            )
+
+    await arknights_user.remove()
+
+
+def schedule_user_deletion(
+    scheduled_deletion: database.ScheduledUserDeletion | database.ScheduledArknightsUserDeletion,
+) -> None:
     """Create a user deletion background task for a provided ScheduledUserDeletion."""
-    async_utils.safe_task(_delayed_user_deletion(scheduled_deletion))
+    if isinstance(scheduled_deletion, database.ScheduledUserDeletion):
+        async_utils.safe_task(_delayed_user_deletion(scheduled_deletion))
+
+    else:
+        async_utils.safe_task(_delayed_arknights_user_deletion(scheduled_deletion))
 
 
 @plugin.load_hook()
 async def schedule_user_deletions() -> None:
     """Get scheduled user deletions and create tasks for them."""
-    scheduled_deletions = await auth.get_scheduled_user_deletions()
+    for scheduled_deletion in await auth.get_scheduled_user_deletions():
+        schedule_user_deletion(scheduled_deletion)
 
-    for scheduled_deletion in scheduled_deletions:
+    for scheduled_deletion in await auth.get_scheduled_arknights_user_deletions():
         schedule_user_deletion(scheduled_deletion)
 
 

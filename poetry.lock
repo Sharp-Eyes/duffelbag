@@ -191,10 +191,10 @@ tests = ["pytest"]
 
 [[package]]
 name = "arkprts"
-version = "0.3.1"
-description = ""
+version = "0.3.5"
+description = "Arknights python wrapper."
 optional = false
-python-versions = "*"
+python-versions = ">=3.9"
 files = []
 develop = false
 
@@ -212,7 +212,7 @@ rsa = ["rsa"]
 type = "git"
 url = "https://github.com/thesadru/arkprts"
 reference = "HEAD"
-resolved_reference = "3cb1d8e138e15dbc1d01cf83e242dfaa388c2eb9"
+resolved_reference = "bad03418c8e9581f39b6cb48bcfb1f38655a23db"
 
 [[package]]
 name = "asttokens"

@@ -128,3 +128,6 @@ class SkillMasteryItem(table.Table):
     mastery = columns.ForeignKey(SkillMastery)
     item = columns.ForeignKey(Item)
     quantity = columns.SmallInt()
+
+
+# TODO: add modules

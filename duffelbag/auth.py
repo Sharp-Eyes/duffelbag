@@ -26,8 +26,6 @@ DELETION_GRACE_PERIOD_SECONDS = 24 * 3600
 
 USER_PATTERN = re.compile(r"[a-zA-Z0-9\-_]{4,32}")
 
-_VALID_SERVERS = frozenset(arkprts.network.NETWORK_ROUTES)
-
 
 def _get_auth(server: arkprts.ArknightsServer) -> arkprts.Auth:
     network = shared.get_network()
@@ -606,11 +604,6 @@ async def list_connected_accounts(
 
 
 # database.ArknightsUser manipulation...
-
-
-def validate_server(server: str) -> typing.TypeGuard[arkprts.ArknightsServer]:
-    """Check whether a string is a valid Arknights server."""
-    return server in _VALID_SERVERS
 
 
 async def start_authentication(

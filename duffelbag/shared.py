@@ -1,13 +1,25 @@
 """Module that provides entrypoints to globally available stuff."""
 
+import typing
+
 import aiohttp
 import arkprts
+
+import database
+
+_VALID_SERVERS = frozenset(arkprts.network.NETWORK_ROUTES)
+
 
 _session: aiohttp.ClientSession | None = None
 _guest_client: arkprts.Client | None = None
 
 # TODO: probably add TTL.
 _client_cache: dict[tuple[arkprts.ArknightsServer, str], arkprts.Client] = {}
+
+
+def validate_server(server: str) -> typing.TypeGuard[arkprts.ArknightsServer]:
+    """Check whether a string is a valid Arknights server."""
+    return server in _VALID_SERVERS
 
 
 def get_session() -> aiohttp.ClientSession:
@@ -74,11 +86,32 @@ async def make_user_client(
     )
 
 
-def get_user_client(server: arkprts.ArknightsServer, uid: str) -> arkprts.Client | None:
+def get_user_client(server: arkprts.ArknightsServer, channel_uid: str) -> arkprts.Client | None:
     """Get a cached arkprts user client."""
-    return _client_cache.get((server, uid))
+    return _client_cache.get((server, channel_uid))
 
 
-def set_user_client(server: arkprts.ArknightsServer, uid: str, client: arkprts.Client) -> None:
+def set_user_client(
+    server: arkprts.ArknightsServer,
+    channel_uid: str,
+    client: arkprts.Client,
+) -> None:
     """Cache an arkprts user Client."""
-    _client_cache[server, uid] = client
+    _client_cache[server, channel_uid] = client
+
+
+async def ensure_user_client(arknights_user: database.ArknightsUser) -> arkprts.Client:
+    """Get a cached user client if it exists, create a new one otherwise."""
+    assert validate_server(arknights_user.server)
+
+    if client := get_user_client(arknights_user.server, arknights_user.channel_uid):
+        return client
+
+    client = await make_user_client(
+        arknights_user.server,
+        arknights_user.channel_uid,
+        arknights_user.yostar_token,
+    )
+    set_user_client(arknights_user.server, arknights_user.channel_uid, client)
+
+    return client

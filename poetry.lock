@@ -1129,12 +1129,14 @@ files = [
 
 [[package]]
 name = "piccolo"
-version = "1.0a2"
+version = "1.1.1"
 description = "A fast, user friendly ORM and query builder which supports asyncio."
 optional = false
 python-versions = ">=3.8.0"
-files = []
-develop = false
+files = [
+    {file = "piccolo-1.1.1-py3-none-any.whl", hash = "sha256:53a061ef0dbf2445283013b527e38794ba952b7c07e2adaa372b013cd28206fe"},
+    {file = "piccolo-1.1.1.tar.gz", hash = "sha256:3e7ecb2c676deec0ccf16186fdbc506d33788f34e969efd17d899f60b073ab3c"},
+]
 
 [package.dependencies]
 asyncpg = {version = ">=0.21.0", optional = true, markers = "extra == \"postgres\""}
@@ -1153,12 +1155,6 @@ playground = ["ipython"]
 postgres = ["asyncpg (>=0.21.0)"]
 sqlite = ["aiosqlite (>=0.16.0)"]
 uvloop = ["uvloop (>=0.12.0)"]
-
-[package.source]
-type = "git"
-url = "https://github.com/piccolo-orm/piccolo"
-reference = "1.0a2"
-resolved_reference = "4f898c1a2a971feb7bd77e36bfe7fc14dd7a5108"
 
 [[package]]
 name = "platformdirs"
@@ -1681,4 +1677,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "2cb0b7435d4e0f70c4dbcf754964c6ac73eb0812956333a9342ea508c36f0aaf"
+content-hash = "0b335421aa2d38f78311cc0b3e2f6a0e37638d0586445251bd95d1fbd04dda17"

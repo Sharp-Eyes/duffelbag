@@ -25,6 +25,7 @@ _MessageComponents = interaction_.Components[interaction_.MessageComponents]
 
 plugin = plugins.Plugin()
 manager = components.get_manager("duffelbag.auth")
+root_manager = components.get_manager()
 
 
 # Account manipulation commands.
@@ -82,7 +83,7 @@ async def account_duffelbag_create(
             inter.locale,
             format_map={"username": username},
         ),
-        components=manager.make_button(
+        components=root_manager.make_button(
             "ExpBtn",
             key_base="auth_new",
             params=[username, auth.Platform.DISCORD.value],

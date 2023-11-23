@@ -21,9 +21,14 @@ class Tag(table.Table):
 
 
 class Skill(table.Table):
-    """The database representation of character-specific information on a skill."""
+    """The database representation of character-specific information on a skill.
 
-    id = columns.Varchar(20, primary_key=True)
+    This is a one (Character) to many (Skill) relationship.
+    """
+
+    id: columns.Serial
+    character_id = columns.ForeignKey(references=Character)
+    skill_id = columns.Varchar(20)
     display_id = columns.Varchar(20, null=True)
 
 
@@ -106,12 +111,10 @@ class SkillSharedUpgradeItem(table.Table):
 class SkillMastery(table.Table):
     """The database representation of static information on a skill's mastery levels.
 
-    This is a one (Skill) to many (SkillMastery) relation, and contains a
-    reference back to the Character.
+    This is a one (Skill) to many (SkillMastery) relation.
     """
 
     id: columns.Serial
-    character = columns.ForeignKey(Character)
     skill = columns.ForeignKey(Skill)
     level = columns.SmallInt()
 

@@ -82,7 +82,7 @@ async def populate_items(
 # TODO: Maybe break this up into separate functions
 
 
-async def populate_characters(  # noqa: C901
+async def populate_characters(
     raw_characters: typing.Sequence[raw_data.RawCharacter] | None = None,
     *,
     clean: bool = False,
@@ -115,179 +115,205 @@ async def populate_characters(  # noqa: C901
         # This should cascade to all other tables. Thanks, foreignkeys.
         await database.Character.delete(force=True)
 
-    for character in raw_characters:
-        async with database.get_db().transaction():
-            # Insert character.
-            await database.Character.insert(
-                database.Character(
-                    id=character.id,
-                    name=character.name,
-                    rarity=character.rarity,
-                    profession=character.profession,
-                    sub_profession=character.sub_profession,
-                    is_alter=character.is_alter,
-                ),
-            ).on_conflict(
-                action="DO UPDATE",
-                target=database.Character.id,
-                values=database.Character.all_columns(),
+    characters: list[database.Character] = []
+    tags: list[database.CharacterTag] = []
+    skills: dict[database.Skill, raw_data.RawCharacterSkill] = {}
+    elite_phases: dict[database.CharacterElitePhase, raw_data.RawPhase] = {}
+    shared_skill_upgrades: dict[database.SkillSharedUpgrade, raw_data.RawSharedSkillCost] = {}
+
+    for raw_character in raw_characters:
+        character = database.Character(
+            id=raw_character.id,
+            name=raw_character.name,
+            rarity=raw_character.rarity,
+            profession=raw_character.profession,
+            sub_profession=raw_character.sub_profession,
+            is_alter=raw_character.is_alter,
+        )
+
+        characters.append(character)
+
+        tags.extend(
+            database.CharacterTag(
+                character=character.id,
+                tag=tag,
             )
+            for tag in raw_character.tags
+        )
 
-            # Insert tags.
-            for tag in character.tags:
-                await database.CharacterTag.insert(
-                    database.CharacterTag(
-                        character=character.id,
-                        tag=tag,
-                    ),
-                )
-                # .on_conflict(
-                #     action="DO UPDATE",
-                #     # A given character can only have the same tag once.
-                #     target=(database.CharacterTag.character, database.CharacterTag.tag),
-                #     values=database.CharacterTag.all_columns()
-                # )
+        skills |= {
+            database.Skill(
+                character_id=character.id,
+                skill_id=skill.id,
+                display_id=skill.display_id,
+            ): skill
+            for skill in raw_character.skills
+        }
 
-            # Insert skills.
-            for skill in character.skills:
-                # Skill row...
-                await database.Skill.insert(
-                    database.Skill(
-                        id=skill.id,
-                        display_id=skill.display_id,
-                    ),
-                ).on_conflict(
-                    action="DO UPDATE",
-                    target=database.Skill.id,
-                    values=database.Skill.all_columns(),
-                )
+        # TODO: (maybe) store E0
+        elite_phases |= {
+            database.CharacterElitePhase(
+                character=character.id,
+                level=level,
+            ): elite_phase
+            for level, elite_phase in enumerate(raw_character.phases[1:], start=1)
+        }
 
-                # Skill mastery...
-                if not skill.masteries:
-                    continue
+        shared_skill_upgrades |= {
+            database.SkillSharedUpgrade(
+                character=character.id,
+                level=level,
+            ): shared_skill_upgrade
+            for level, shared_skill_upgrade in enumerate(raw_character.shared_skills, start=1)
+        }
 
-                for level, mastery in enumerate(skill.masteries, start=1):
-                    mastery_result = await database.SkillMastery.insert(
-                        database.SkillMastery(
-                            character=character.id,
-                            skill=skill.id,
-                            level=level,
-                        ),
-                    )
-                    # .on_conflict(
-                    #     action="DO UPDATE",
-                    #     target=(
-                    #         database.SkillMastery.character,
-                    #         database.SkillMastery.skill,
-                    #         database.SkillMastery.level,
-                    #     ),
-                    #     values=database.SkillMastery.all_columns()
-                    # )
+    await (
+        database.Character.insert(*characters)
+        .on_conflict(
+            action="DO UPDATE",
+            target=database.Character.id,
+            values=database.Character.all_columns(),
+        )
+    )  # fmt: skip
 
-                    mastery_id: int = mastery_result[0]["id"]
+    await (
+        # TODO: fix constraint and uncomment
+        database.CharacterTag.insert(*tags)
+        # .on_conflict(
+        #     action="DO UPDATE",
+        #     # A given character can only have the same tag once.
+        #     target=(database.CharacterTag.character, database.CharacterTag.tag),
+        #     values=database.CharacterTag.all_columns()
+        # )
+    )  # fmt: skip
 
-                    # If the mastery exists, it should have a cost.
-                    if not mastery.cost:
-                        continue
+    await (
+        database.Skill.insert(*skills.keys())
+        .on_conflict(
+            action="DO UPDATE",
+            target=database.Skill.id,
+            values=database.all_columns_but_pk(database.Skill),
+        )
+    )  # fmt: skip
 
-                    for item in mastery.cost:
-                        await database.SkillMasteryItem.insert(
-                            database.SkillMasteryItem(
-                                mastery=mastery_id,
-                                item=item.id,
-                                quantity=item.count,
-                            ),
-                        )
-                        # .on_conflict(
-                        #     action="DO UPDATE",
-                        #     target=(
-                        #         # A given mastery can only contain the same item type once.
-                        #         database.SkillMasteryItem.mastery,
-                        #         database.SkillMasteryItem.item,
-                        #     ),
-                        #     values=[database.SkillMasteryItem.quantity]
-                        # )
+    await (
+        # TODO: fix constraint and uncomment
+        database.CharacterElitePhase.insert(*elite_phases.keys())
+        # .on_conflict(
+        #     action="DO UPDATE",
+        #     target=(
+        #         database.CharacterElitePhase.character,
+        #         database.CharacterElitePhase.level,
+        #     ),
+        #     values=database.CharacterElitePhase.all_columns()
+        # )
+    )  # fmt: skip
 
-            # Insert elite levels.
-            # TODO: Store stats, store elite 0.
-            for level, elite_phase in enumerate(character.phases[1:], start=1):
-                # Elite phase row...
-                elite_phase_result = await database.CharacterElitePhase.insert(
-                    database.CharacterElitePhase(
-                        character=character.id,
-                        level=level,
-                    ),
-                )
-                # .on_conflict(
-                #     action="DO UPDATE",
-                #     target=(
-                #         database.CharacterElitePhase.character,
-                #         database.CharacterElitePhase.level,
-                #     ),
-                #     values=database.CharacterElitePhase.all_columns()
-                # )
+    await (
+        # TODO: fix constraint and uncomment
+        database.SkillSharedUpgrade.insert(*shared_skill_upgrades.keys())
+        # .on_conflict(
+        #     action="DO UPDATE",
+        #     target=(
+        #         database.SkillSharedUpgrade.character,
+        #         database.SkillSharedUpgrade.level,
+        #     ),
+        #     values=database.SkillSharedUpgrade.all_columns()
+        # )
+    )
 
-                elite_phase_id: int = elite_phase_result[0]["id"]
+    # Parse masteries...
+    skill_masteries: dict[database.SkillMastery, raw_data.RawSkillCost] = {
+        database.SkillMastery(
+            skill=skill.id,
+            level=level,
+        ): mastery
+        for skill, raw_skill in skills.items()
+        if raw_skill.masteries
+        for level, mastery in enumerate(raw_skill.masteries, start=1)
+    }
 
-                # If the elite phase exists, it should have a cost.
-                if not elite_phase.cost:
-                    continue
+    await (
+        database.SkillMastery.insert(*skill_masteries.keys())
+        # TODO: fix constraint and uncomment
+        # .on_conflict(
+        #     action="DO UPDATE",
+        #     target=(
+        #         database.SkillMastery.character,
+        #         database.SkillMastery.skill,
+        #         database.SkillMastery.level,
+        #     ),
+        #     values=database.SkillMastery.all_columns()
+        # )
+    )
 
-                for item in elite_phase.cost:
-                    await database.CharacterElitePhaseItem.insert(
-                        database.CharacterElitePhaseItem(
-                            elite_phase=elite_phase_id,
-                            item=item.id,
-                            quantity=item.count,
-                        ),
-                    )
-                    # .on_conflict(
-                    #     action="DO UPDATE",
-                    #     target=(
-                    #         # A given elite phase can only contain the same item type once.
-                    #         database.CharacterElitePhaseItem.elite_phase,
-                    #         database.CharacterElitePhaseItem.item,
-                    #     ),
-                    #     values=[database.CharacterElitePhaseItem.quantity]
-                    # )
+    # Parse mastery costs...
+    await database.SkillMasteryItem.insert(
+        *[
+            database.SkillMasteryItem(
+                mastery=mastery.id,
+                item=item.id,
+                quantity=item.count,
+            )
+            for mastery, raw_mastery in skill_masteries.items()
+            if raw_mastery.cost
+            for item in raw_mastery.cost
+        ],
+    )
+    # TODO: fix constraint and uncomment
+    # .on_conflict(
+    #     action="DO UPDATE",
+    #     target=(
+    #         database.SkillMasteryItem.mastery,
+    #         database.SkillMasteryItem.item,
+    #     ),
+    #     values=[database.SkillMasteryItem.quantity]
+    # )
 
-            # Insert shared skill costs.
-            for level, shared_skill_upgrade in enumerate(character.shared_skills, start=1):
-                skill_cost_result = await database.SkillSharedUpgrade.insert(
-                    database.SkillSharedUpgrade(
-                        character=character.id,
-                        level=level,
-                    ),
-                )
-                # .on_conflict(
-                #     action="DO UPDATE",
-                #     target=(
-                #         database.SkillSharedUpgrade.character,
-                #         database.SkillSharedUpgrade.level,
-                #     ),
-                #     values=database.SkillSharedUpgrade.all_columns()
-                # )
+    # Parse elite level costs...
+    await database.CharacterElitePhaseItem.insert(
+        *[
+            database.CharacterElitePhaseItem(
+                elite_phase=elite_phase.id,
+                item=item.id,
+                quantity=item.count,
+            )
+            for elite_phase, raw_elite_phase in elite_phases.items()
+            if raw_elite_phase.cost
+            for item in raw_elite_phase.cost
+        ],
+    )
+    # TODO: fix constraint and uncomment
+    # .on_conflict(
+    #     action="DO UPDATE",
+    #     target=(
+    #         # A given elite phase can only contain the same item type once.
+    #         database.CharacterElitePhaseItem.elite_phase,
+    #         database.CharacterElitePhaseItem.item,
+    #     ),
+    #     values=[database.CharacterElitePhaseItem.quantity]
+    # )
 
-                skill_cost_id: int = skill_cost_result[0]["id"]
-
-                # If the skill level exists, it should have a cost.
-                if not shared_skill_upgrade.cost:
-                    continue
-
-                for item in shared_skill_upgrade.cost:
-                    await database.SkillSharedUpgradeItem.insert(
-                        database.SkillSharedUpgradeItem(
-                            upgrade=skill_cost_id,
-                            item=item.id,
-                            quantity=item.count,
-                        ),
-                    )
-                    # .on_conflict(
-                    #     action="DO UPDATE",
-                    #     target=(
-                    #         # A given elite phase can only contain the same item type once.
-                    #         database.SkillSharedUpgradeItem.upgrade,
-                    #         database.SkillSharedUpgradeItem.item,
-                    #     ),
-                    #     values=[database.SkillSharedUpgradeItem.quantity]
-                    # )
+    # Parse shared skill upgrades...
+    await database.SkillSharedUpgradeItem.insert(
+        *[
+            database.SkillSharedUpgradeItem(
+                upgrade=shared_skill_upgrade.id,
+                item=item.id,
+                quantity=item.count,
+            )
+            for shared_skill_upgrade, raw_shared_skill_upgrade in shared_skill_upgrades.items()
+            if raw_shared_skill_upgrade.cost
+            for item in raw_shared_skill_upgrade.cost
+        ],
+    )
+    # TODO: fix constraint and uncomment
+    # .on_conflict(
+    #     action="DO UPDATE",
+    #     target=(
+    #         # A given elite phase can only contain the same item type once.
+    #         database.SkillSharedUpgradeItem.upgrade,
+    #         database.SkillSharedUpgradeItem.item,
+    #     ),
+    #     values=[database.SkillSharedUpgradeItem.quantity]
+    # )

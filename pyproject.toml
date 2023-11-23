@@ -19,7 +19,7 @@ coloredlogs = "^15.0.1"
 devtools = "^0.11.0"
 ruff = "^0.0.289"
 pre-commit = "^3.3.2"
-pyright = "^1.1.310"
+pyright = "^1.1.337"
 slotscheck = "^0.17.0"
 
 

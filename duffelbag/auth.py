@@ -221,7 +221,7 @@ async def schedule_user_deletion(
 
         existing_deletion = await (
             database.ScheduledUserDeletion.objects()
-            .where(database.ScheduledUserDeletion.user == duffelbag_user.id)
+            .where(database.ScheduledUserDeletion.duffelbag_id == duffelbag_user.id)
             .first()
         )  # fmt: skip
 
@@ -278,7 +278,7 @@ async def schedule_arknights_user_deletion(
 
         existing_deletion = await (
             database.ScheduledArknightsUserDeletion.objects()
-            .where(database.ScheduledArknightsUserDeletion.arknights_user == arknights_user.id)
+            .where(database.ScheduledArknightsUserDeletion.arknights_id == arknights_user.id)
             .first()
         )  # fmt: skip
 
@@ -319,14 +319,14 @@ async def get_scheduled_user_deletion_user(
     """Get the duffelbag user that is to be deleted."""
     duffelbag_user = await (
         database.DuffelbagUser.objects()
-        .where(database.DuffelbagUser.id == scheduled_user_deletion.user)
+        .where(database.DuffelbagUser.id == scheduled_user_deletion.duffelbag_id)
         .first()
     )
 
     if not duffelbag_user:
         msg = (
-            f"Duffelbag user with id {scheduled_user_deletion.user} is not"
-            " scheduled for deletion."
+            f"Duffelbag user with id {scheduled_user_deletion.duffelbag_id} is"
+            " not scheduled for deletion."
         )
         raise exceptions.DuffelbagDeletionNotQueuedError(msg)
 
@@ -339,13 +339,13 @@ async def get_scheduled_arknights_user_deletion_users(
     """Get the duffelbag user that is to be deleted."""
     arknights_user = await (
         database.ArknightsUser.objects()
-        .where(database.ArknightsUser.id == scheduled_user_deletion.arknights_user)
+        .where(database.ArknightsUser.id == scheduled_user_deletion.arknights_id)
         .first()
     )
 
     if not arknights_user:
         msg = (
-            f"Arknights user with id {scheduled_user_deletion.arknights_user} is not"
+            f"Arknights user with id {scheduled_user_deletion.arknights_id} is not"
             " scheduled for deletion."
         )
         raise exceptions.ArknightsDeletionNotQueuedError(msg)
@@ -383,7 +383,7 @@ async def get_user_by_platform(
     strict: bool = False,
 ) -> database.DuffelbagUser | None:
     """Get the duffelbag user linked to a platform account."""
-    joined = database.DuffelbagUser.id.join_on(database.PlatformUser.user)
+    joined = database.DuffelbagUser.id.join_on(database.PlatformUser.duffelbag_id)
 
     duffelbag_user = await (
         database.DuffelbagUser.objects()
@@ -549,10 +549,10 @@ async def remove_platform_account(
         The external account is not registered to the provided Duffelbag
         account.
     """
-    result: list[dict[str, object]] = await (
+    result: list[dict[str, object]] = await (  # type: ignore
         database.PlatformUser.delete()
         .where(
-            (database.PlatformUser.user == duffelbag_user.id)
+            (database.PlatformUser.duffelbag_id == duffelbag_user.id)
             & (database.PlatformUser.platform_id == platform_id)
             & (database.PlatformUser.platform_name == platform.value),
         )
@@ -596,7 +596,10 @@ async def list_connected_accounts(
         All external platform accounts connected to the provided Duffelbag
         account.
     """
-    query = database.PlatformUser.objects().where(database.PlatformUser.user == duffelbag_user.id)
+    query = (
+        database.PlatformUser.objects()
+        .where(database.PlatformUser.duffelbag_id == duffelbag_user.id)
+    )  # fmt: skip
     if platform:
         query.where(database.PlatformUser.platform_name == platform.value)
 
@@ -725,7 +728,7 @@ async def add_arknights_account(
     :class:`exceptions.ArknightsConnectionExists`
         The Arknights account is already registered to a Duffelbag account.
     """
-    joined = database.DuffelbagUser.id.join_on(database.ArknightsUser.user)
+    joined = database.DuffelbagUser.id.join_on(database.ArknightsUser.duffelbag_id)
 
     existing_user = await (
         database.DuffelbagUser.objects()  # pyright: ignore
@@ -749,7 +752,7 @@ async def add_arknights_account(
     active_account_exists: bool = await (
         database.ArknightsUser.exists()  # pyright: ignore
         .where(
-            (database.ArknightsUser.user == duffelbag_user.id)
+            (database.ArknightsUser.duffelbag_id == duffelbag_user.id)
             & (database.ArknightsUser.active == True),  # noqa: E712
         )
     )  # fmt: skip
@@ -790,7 +793,7 @@ async def list_arknights_accounts(
     """
     return await (
         database.ArknightsUser.objects()
-        .where(database.ArknightsUser.user == duffelbag_user.id)
+        .where(database.ArknightsUser.duffelbag_id == duffelbag_user.id)
     )  # fmt: skip
 
 
@@ -813,7 +816,7 @@ async def get_active_arknights_account(
     arknights_user = await (
         database.ArknightsUser.objects()
         .where(
-            (database.ArknightsUser.user == duffelbag_user.id)
+            (database.ArknightsUser.duffelbag_id == duffelbag_user.id)
             & (database.ArknightsUser.active == True),  # noqa: E712
         )
         .first()
@@ -851,7 +854,7 @@ async def set_active_arknights_account(
     active_user = await (
         database.ArknightsUser.objects()
         .where(
-            (database.ArknightsUser.user == arknights_user.user)
+            (database.ArknightsUser.duffelbag_id == arknights_user.duffelbag_id)
             & (database.ArknightsUser.active == True),  # noqa: E712
         )
         .first()

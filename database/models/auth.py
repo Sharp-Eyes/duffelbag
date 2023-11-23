@@ -25,7 +25,7 @@ class PlatformUser(table.Table):
     """
 
     id: columns.Serial
-    user = columns.ForeignKey(DuffelbagUser)
+    duffelbag_id = columns.ForeignKey(DuffelbagUser)
     platform_id = columns.BigInt(null=True, unique=True, index=True)
     platform_name = columns.Varchar(16)
 
@@ -38,7 +38,7 @@ class ArknightsUser(table.Table):
     """The database representation of a user's Arknights authentication data."""
 
     id: columns.Serial
-    user = columns.ForeignKey(DuffelbagUser)
+    duffelbag_id = columns.ForeignKey(DuffelbagUser)
     channel_uid = columns.Varchar(16)
     yostar_token = columns.Varchar(32)
     server = columns.Varchar(4)
@@ -60,7 +60,7 @@ class ScheduledUserDeletion(table.Table):
     """
 
     id: columns.Serial
-    user = columns.ForeignKey(DuffelbagUser, unique=True)
+    duffelbag_id = columns.ForeignKey(DuffelbagUser, unique=True)
     deletion_ts = columns.Timestamptz()
 
 
@@ -72,6 +72,6 @@ class ScheduledArknightsUserDeletion(table.Table):
     """
 
     id: columns.Serial
-    user = columns.ForeignKey(DuffelbagUser)
-    arknights_user = columns.ForeignKey(ArknightsUser, unique=True)
+    duffelbag_id = columns.ForeignKey(DuffelbagUser)
+    arknights_id = columns.ForeignKey(ArknightsUser, unique=True)
     deletion_ts = columns.Timestamptz()

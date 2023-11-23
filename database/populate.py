@@ -27,11 +27,11 @@ async def populate_tags(
 
     if clean:
         # Delete all existing tags...
-        await database.Tag.delete(force=True)
+        await database.StaticTag.delete(force=True)
 
     # Re-populate tags...
-    await database.Tag.insert(
-        *[database.Tag(name=tag.name) for tag in raw_tags],
+    await database.StaticTag.insert(
+        *[database.StaticTag(name=tag.name) for tag in raw_tags],
     ).on_conflict(
         action="DO NOTHING",
     )
@@ -58,12 +58,12 @@ async def populate_items(
 
     if clean:
         # Delete all existing tags...
-        await database.Item.delete(force=True)
+        await database.StaticItem.delete(force=True)
 
     # Re-populate tags...
-    await database.Item.insert(
+    await database.StaticItem.insert(
         *[
-            database.Item(
+            database.StaticItem(
                 id=item.id,
                 icon_id=item.icon_id,
                 name=item.name,
@@ -74,8 +74,8 @@ async def populate_items(
         ],
     ).on_conflict(
         action="DO UPDATE",
-        target=database.Item.id,
-        values=database.Item.all_columns(),
+        target=database.StaticItem.id,
+        values=database.StaticItem.all_columns(),
     )
 
 
@@ -107,16 +107,16 @@ async def populate_characters(
 
     if clean:
         # This should cascade to all other tables. Thanks, foreignkeys.
-        await database.Character.delete(force=True)
+        await database.StaticCharacter.delete(force=True)
 
-    characters: list[database.Character] = []
-    tags: list[database.CharacterTag] = []
-    skills: dict[database.Skill, raw_data.RawCharacterSkill] = {}
-    elite_phases: dict[database.CharacterElitePhase, raw_data.RawPhase] = {}
-    shared_skill_upgrades: dict[database.SkillSharedUpgrade, raw_data.RawSharedSkillCost] = {}
+    characters: list[database.StaticCharacter] = []
+    tags: list[database.StaticCharacterTag] = []
+    skills: dict[database.StaticSkill, raw_data.RawCharacterSkill] = {}
+    elite_phases: dict[database.StaticCharacterElitePhase, raw_data.RawPhase] = {}
+    shared_skill_upgrades: dict[database.StaticSkillSharedUpgrade, raw_data.RawSharedSkillCost] = {}
 
     for raw_character in raw_characters:
-        character = database.Character(
+        character = database.StaticCharacter(
             id=raw_character.id,
             name=raw_character.name,
             rarity=raw_character.rarity,
@@ -128,15 +128,15 @@ async def populate_characters(
         characters.append(character)
 
         tags.extend(
-            database.CharacterTag(
-                character=character.id,
-                tag=tag,
+            database.StaticCharacterTag(
+                character_id=character.id,
+                tag_id=tag,
             )
             for tag in raw_character.tags
         )
 
         skills |= {
-            database.Skill(
+            database.StaticSkill(
                 character_id=character.id,
                 skill_id=skill.id,
                 display_id=skill.display_id,
@@ -146,77 +146,77 @@ async def populate_characters(
 
         # TODO: (maybe) store E0
         elite_phases |= {
-            database.CharacterElitePhase(
-                character=character.id,
+            database.StaticCharacterElitePhase(
+                character_id=character.id,
                 level=level,
             ): elite_phase
             for level, elite_phase in enumerate(raw_character.phases[1:], start=1)
         }
 
         shared_skill_upgrades |= {
-            database.SkillSharedUpgrade(
-                character=character.id,
+            database.StaticSkillSharedUpgrade(
+                character_id=character.id,
                 level=level,
             ): shared_skill_upgrade
             for level, shared_skill_upgrade in enumerate(raw_character.shared_skills, start=1)
         }
 
     await (
-        database.Character.insert(*characters)
+        database.StaticCharacter.insert(*characters)
         .on_conflict(
             action="DO UPDATE",
-            target=database.Character.id,
-            values=database.all_columns_but_pk(database.Character),
+            target=database.StaticCharacter.id,
+            values=database.all_columns_but_pk(database.StaticCharacter),
         )
     )  # fmt: skip
 
     await (
-        database.CharacterTag.insert(*tags)
+        database.StaticCharacterTag.insert(*tags)
         .on_conflict(
             action="DO UPDATE",
             # A given character can only have the same tag once.
-            target=(database.CharacterTag.character, database.CharacterTag.tag),
-            values=database.all_columns_but_pk(database.CharacterTag),
+            target=(database.StaticCharacterTag.character_id, database.StaticCharacterTag.tag_id),
+            values=database.all_columns_but_pk(database.StaticCharacterTag),
         )
     )  # fmt: skip
 
     await (
-        database.Skill.insert(*skills.keys())
+        database.StaticSkill.insert(*skills.keys())
         .on_conflict(
             action="DO UPDATE",
-            target=database.Skill.id,
-            values=database.all_columns_but_pk(database.Skill),
+            target=database.StaticSkill.id,
+            values=database.all_columns_but_pk(database.StaticSkill),
         )
     )  # fmt: skip
 
     await (
-        database.CharacterElitePhase.insert(*elite_phases.keys())
-        .on_conflict(
-            action="DO UPDATE",
-            target=(
-                database.CharacterElitePhase.character,
-                database.CharacterElitePhase.level,
-            ),
-            values=database.all_columns_but_pk(database.CharacterElitePhase),
-        )
-    )  # fmt: skip
-
-    await (
-        database.SkillSharedUpgrade.insert(*shared_skill_upgrades.keys())
+        database.StaticCharacterElitePhase.insert(*elite_phases.keys())
         .on_conflict(
             action="DO UPDATE",
             target=(
-                database.SkillSharedUpgrade.character,
-                database.SkillSharedUpgrade.level,
+                database.StaticCharacterElitePhase.character_id,
+                database.StaticCharacterElitePhase.level,
             ),
-            values=database.all_columns_but_pk(database.SkillSharedUpgrade),
+            values=database.all_columns_but_pk(database.StaticCharacterElitePhase),
+        )
+    )  # fmt: skip
+
+    await (
+        database.StaticSkillSharedUpgrade.insert(*shared_skill_upgrades.keys())
+        .on_conflict(
+            action="DO UPDATE",
+            target=(
+                database.StaticSkillSharedUpgrade.character_id,
+                database.StaticSkillSharedUpgrade.level,
+            ),
+            values=database.all_columns_but_pk(database.StaticSkillSharedUpgrade),
         )
     )  # fmt: skip
 
     # Parse masteries...
-    skill_masteries: dict[database.SkillMastery, raw_data.RawSkillCost] = {
-        database.SkillMastery(
-            skill=skill.id,
+    skill_masteries: dict[database.StaticSkillMastery, raw_data.RawSkillCost] = {
+        database.StaticSkillMastery(
+            skill_id=skill.id,
             level=level,
         ): mastery
         for skill, raw_skill in skills.items()
@@ -225,23 +225,23 @@ async def populate_characters(
     }
 
     await (
-        database.SkillMastery.insert(*skill_masteries.keys())
+        database.StaticSkillMastery.insert(*skill_masteries.keys())
         .on_conflict(
             action="DO UPDATE",
             target=(
-                database.SkillMastery.skill,
-                database.SkillMastery.level,
+                database.StaticSkillMastery.skill_id,
+                database.StaticSkillMastery.level,
             ),
-            values=database.all_columns_but_pk(database.SkillMastery),
+            values=database.all_columns_but_pk(database.StaticSkillMastery),
         )
     )  # fmt: skip
 
     # Parse mastery costs...
-    await database.SkillMasteryItem.insert(
+    await database.StaticSkillMasteryItem.insert(
         *[
-            database.SkillMasteryItem(
-                mastery=mastery.id,
-                item=item.id,
+            database.StaticSkillMasteryItem(
+                mastery_id=mastery.id,
+                item_id=item.id,
                 quantity=item.count,
             )
             for mastery, raw_mastery in skill_masteries.items()
@@ -251,18 +251,18 @@ async def populate_characters(
     ).on_conflict(
         action="DO UPDATE",
         target=(
-            database.SkillMasteryItem.mastery,
-            database.SkillMasteryItem.item,
+            database.StaticSkillMasteryItem.mastery_id,
+            database.StaticSkillMasteryItem.item_id,
         ),
-        values=database.all_columns_but_pk(database.SkillMasteryItem),
+        values=database.all_columns_but_pk(database.StaticSkillMasteryItem),
     )
 
     # Parse elite level costs...
-    await database.CharacterElitePhaseItem.insert(
+    await database.StaticCharacterElitePhaseItem.insert(
         *[
-            database.CharacterElitePhaseItem(
-                elite_phase=elite_phase.id,
-                item=item.id,
+            database.StaticCharacterElitePhaseItem(
+                elite_phase_id=elite_phase.id,
+                item_id=item.id,
                 quantity=item.count,
             )
             for elite_phase, raw_elite_phase in elite_phases.items()
@@ -272,19 +272,18 @@ async def populate_characters(
     ).on_conflict(
         action="DO UPDATE",
         target=(
-            # A given elite phase can only contain the same item type once.
-            database.CharacterElitePhaseItem.elite_phase,
-            database.CharacterElitePhaseItem.item,
+            database.StaticCharacterElitePhaseItem.elite_phase_id,
+            database.StaticCharacterElitePhaseItem.item_id,
         ),
-        values=database.all_columns_but_pk(database.CharacterElitePhaseItem),
+        values=database.all_columns_but_pk(database.StaticCharacterElitePhaseItem),
     )
 
     # Parse shared skill upgrades...
-    await database.SkillSharedUpgradeItem.insert(
+    await database.StaticSkillSharedUpgradeItem.insert(
         *[
-            database.SkillSharedUpgradeItem(
-                upgrade=shared_skill_upgrade.id,
-                item=item.id,
+            database.StaticSkillSharedUpgradeItem(
+                skill_upgrade_id=shared_skill_upgrade.id,
+                item_id=item.id,
                 quantity=item.count,
             )
             for shared_skill_upgrade, raw_shared_skill_upgrade in shared_skill_upgrades.items()
@@ -295,8 +294,8 @@ async def populate_characters(
         action="DO UPDATE",
         target=(
             # A given elite phase can only contain the same item type once.
-            database.SkillSharedUpgradeItem.upgrade,
-            database.SkillSharedUpgradeItem.item,
+            database.StaticSkillSharedUpgradeItem.skill_upgrade_id,
+            database.StaticSkillSharedUpgradeItem.item_id,
         ),
-        values=database.all_columns_but_pk(database.SkillSharedUpgradeItem),
+        values=database.all_columns_but_pk(database.StaticSkillSharedUpgradeItem),
     )

@@ -3,7 +3,7 @@
 from piccolo import columns, table
 
 
-class Character(table.Table):
+class StaticCharacter(table.Table):
     """The database representation of static information on an Arknights character."""
 
     id = columns.Varchar(20, primary_key=True)
@@ -14,25 +14,25 @@ class Character(table.Table):
     is_alter = columns.Boolean()
 
 
-class Tag(table.Table):
+class StaticTag(table.Table):
     """The database representation of a recruitment tag of an Arknights character."""
 
     name = columns.Varchar(16, primary_key=True)
 
 
-class Skill(table.Table):
+class StaticSkill(table.Table):
     """The database representation of character-specific information on a skill.
 
     This is a one (Character) to many (Skill) relationship.
     """
 
     id: columns.Serial
-    character_id = columns.ForeignKey(references=Character)
+    character_id = columns.ForeignKey(references=StaticCharacter)
     skill_id = columns.Varchar(20)
     display_id = columns.Varchar(20, null=True)
 
 
-class Item(table.Table):
+class StaticItem(table.Table):
     """The database representation of static information on an item."""
 
     id = columns.Varchar(20, primary_key=True)
@@ -42,31 +42,31 @@ class Item(table.Table):
     rarity = columns.SmallInt()
 
 
-class CharacterTag(table.Table):
+class StaticCharacterTag(table.Table):
     """A database meta-table linking a Character to a Tag.
 
     This is a one (Character) to many (Tag) relationship.
     """
 
     id: columns.Serial
-    character = columns.ForeignKey(Character)
-    tag = columns.ForeignKey(Tag)
+    character_id = columns.ForeignKey(StaticCharacter)
+    tag_id = columns.ForeignKey(StaticTag)
 
 
-class CharacterElitePhase(table.Table):
+class StaticCharacterElitePhase(table.Table):
     """The database representation of static information on an elite phase (e.g. Elite 1).
 
     This is a one (Character) to many (CharacterElitePhase) relationship.
     """
 
     id: columns.Serial
-    character = columns.ForeignKey(Character)
+    character_id = columns.ForeignKey(StaticCharacter)
     level = columns.SmallInt()
 
     # TODO: Elite phase stat blocks
 
 
-class CharacterElitePhaseItem(table.Table):
+class StaticCharacterElitePhaseItem(table.Table):
     """A database meta-table linking an Item to a CharacterElitePhase.
 
     This is a one (CharacterElitePhase) to many (Item) relationship.
@@ -75,12 +75,12 @@ class CharacterElitePhaseItem(table.Table):
     """
 
     id: columns.Serial
-    elite_phase = columns.ForeignKey(CharacterElitePhase)
-    item = columns.ForeignKey(Item)
+    elite_phase_id = columns.ForeignKey(StaticCharacterElitePhase)
+    item_id = columns.ForeignKey(StaticItem)
     quantity = columns.SmallInt()
 
 
-class SkillSharedUpgrade(table.Table):
+class StaticSkillSharedUpgrade(table.Table):
     """The database representation of static information on global skill level upgrades.
 
     This accounts for the first seven levels of skill upgrades, where a single
@@ -90,11 +90,11 @@ class SkillSharedUpgrade(table.Table):
     """
 
     id: columns.Serial
-    character = columns.ForeignKey(Character)
+    character_id = columns.ForeignKey(StaticCharacter)
     level = columns.SmallInt()
 
 
-class SkillSharedUpgradeItem(table.Table):
+class StaticSkillSharedUpgradeItem(table.Table):
     """A database meta-table linking an Item to a SkillSharedUpgrade.
 
     This is a one (SkillSharedUpgrade) to many (Item) relationship.
@@ -103,23 +103,23 @@ class SkillSharedUpgradeItem(table.Table):
     """
 
     id: columns.Serial
-    upgrade = columns.ForeignKey(SkillSharedUpgrade)
-    item = columns.ForeignKey(Item)
+    skill_upgrade_id = columns.ForeignKey(StaticSkillSharedUpgrade)
+    item_id = columns.ForeignKey(StaticItem)
     quantity = columns.SmallInt()
 
 
-class SkillMastery(table.Table):
+class StaticSkillMastery(table.Table):
     """The database representation of static information on a skill's mastery levels.
 
     This is a one (Skill) to many (SkillMastery) relation.
     """
 
     id: columns.Serial
-    skill = columns.ForeignKey(Skill)
+    skill_id = columns.ForeignKey(StaticSkill)
     level = columns.SmallInt()
 
 
-class SkillMasteryItem(table.Table):
+class StaticSkillMasteryItem(table.Table):
     """A database meta-table linking an Item to a SkillMastery.
 
     This is a one (SkillMastery) to many (Item) relationship.
@@ -128,8 +128,8 @@ class SkillMasteryItem(table.Table):
     """
 
     id: columns.Serial
-    mastery = columns.ForeignKey(SkillMastery)
-    item = columns.ForeignKey(Item)
+    mastery_id = columns.ForeignKey(StaticSkillMastery)
+    item_id = columns.ForeignKey(StaticItem)
     quantity = columns.SmallInt()
 
 

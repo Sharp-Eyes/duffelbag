@@ -79,9 +79,6 @@ async def populate_items(
     )
 
 
-# TODO: Maybe break this up into separate functions
-
-
 async def populate_characters(
     raw_characters: typing.Sequence[raw_data.RawCharacter] | None = None,
     *,
@@ -105,9 +102,6 @@ async def populate_characters(
         More useful is that it ensures no duplicate meta-entries are created
         while we wait for composite unique constraints to be added to piccolo.
     """
-    # TODO: Uncomment `on_conflict` blocks when composite unique constraints
-    #       are added to piccolo.
-
     if not raw_characters:
         raw_characters = await raw_data.fetch_characters()
 
@@ -172,19 +166,18 @@ async def populate_characters(
         .on_conflict(
             action="DO UPDATE",
             target=database.Character.id,
-            values=database.Character.all_columns(),
+            values=database.all_columns_but_pk(database.Character),
         )
     )  # fmt: skip
 
     await (
-        # TODO: fix constraint and uncomment
         database.CharacterTag.insert(*tags)
-        # .on_conflict(
-        #     action="DO UPDATE",
-        #     # A given character can only have the same tag once.
-        #     target=(database.CharacterTag.character, database.CharacterTag.tag),
-        #     values=database.CharacterTag.all_columns()
-        # )
+        .on_conflict(
+            action="DO UPDATE",
+            # A given character can only have the same tag once.
+            target=(database.CharacterTag.character, database.CharacterTag.tag),
+            values=database.all_columns_but_pk(database.CharacterTag),
+        )
     )  # fmt: skip
 
     await (
@@ -197,30 +190,28 @@ async def populate_characters(
     )  # fmt: skip
 
     await (
-        # TODO: fix constraint and uncomment
         database.CharacterElitePhase.insert(*elite_phases.keys())
-        # .on_conflict(
-        #     action="DO UPDATE",
-        #     target=(
-        #         database.CharacterElitePhase.character,
-        #         database.CharacterElitePhase.level,
-        #     ),
-        #     values=database.CharacterElitePhase.all_columns()
-        # )
+        .on_conflict(
+            action="DO UPDATE",
+            target=(
+                database.CharacterElitePhase.character,
+                database.CharacterElitePhase.level,
+            ),
+            values=database.all_columns_but_pk(database.CharacterElitePhase),
+        )
     )  # fmt: skip
 
     await (
-        # TODO: fix constraint and uncomment
         database.SkillSharedUpgrade.insert(*shared_skill_upgrades.keys())
-        # .on_conflict(
-        #     action="DO UPDATE",
-        #     target=(
-        #         database.SkillSharedUpgrade.character,
-        #         database.SkillSharedUpgrade.level,
-        #     ),
-        #     values=database.SkillSharedUpgrade.all_columns()
-        # )
-    )
+        .on_conflict(
+            action="DO UPDATE",
+            target=(
+                database.SkillSharedUpgrade.character,
+                database.SkillSharedUpgrade.level,
+            ),
+            values=database.all_columns_but_pk(database.SkillSharedUpgrade),
+        )
+    )  # fmt: skip
 
     # Parse masteries...
     skill_masteries: dict[database.SkillMastery, raw_data.RawSkillCost] = {
@@ -235,17 +226,15 @@ async def populate_characters(
 
     await (
         database.SkillMastery.insert(*skill_masteries.keys())
-        # TODO: fix constraint and uncomment
-        # .on_conflict(
-        #     action="DO UPDATE",
-        #     target=(
-        #         database.SkillMastery.character,
-        #         database.SkillMastery.skill,
-        #         database.SkillMastery.level,
-        #     ),
-        #     values=database.SkillMastery.all_columns()
-        # )
-    )
+        .on_conflict(
+            action="DO UPDATE",
+            target=(
+                database.SkillMastery.skill,
+                database.SkillMastery.level,
+            ),
+            values=database.all_columns_but_pk(database.SkillMastery),
+        )
+    )  # fmt: skip
 
     # Parse mastery costs...
     await database.SkillMasteryItem.insert(
@@ -259,16 +248,14 @@ async def populate_characters(
             if raw_mastery.cost
             for item in raw_mastery.cost
         ],
+    ).on_conflict(
+        action="DO UPDATE",
+        target=(
+            database.SkillMasteryItem.mastery,
+            database.SkillMasteryItem.item,
+        ),
+        values=database.all_columns_but_pk(database.SkillMasteryItem),
     )
-    # TODO: fix constraint and uncomment
-    # .on_conflict(
-    #     action="DO UPDATE",
-    #     target=(
-    #         database.SkillMasteryItem.mastery,
-    #         database.SkillMasteryItem.item,
-    #     ),
-    #     values=[database.SkillMasteryItem.quantity]
-    # )
 
     # Parse elite level costs...
     await database.CharacterElitePhaseItem.insert(
@@ -282,17 +269,15 @@ async def populate_characters(
             if raw_elite_phase.cost
             for item in raw_elite_phase.cost
         ],
+    ).on_conflict(
+        action="DO UPDATE",
+        target=(
+            # A given elite phase can only contain the same item type once.
+            database.CharacterElitePhaseItem.elite_phase,
+            database.CharacterElitePhaseItem.item,
+        ),
+        values=database.all_columns_but_pk(database.CharacterElitePhaseItem),
     )
-    # TODO: fix constraint and uncomment
-    # .on_conflict(
-    #     action="DO UPDATE",
-    #     target=(
-    #         # A given elite phase can only contain the same item type once.
-    #         database.CharacterElitePhaseItem.elite_phase,
-    #         database.CharacterElitePhaseItem.item,
-    #     ),
-    #     values=[database.CharacterElitePhaseItem.quantity]
-    # )
 
     # Parse shared skill upgrades...
     await database.SkillSharedUpgradeItem.insert(
@@ -306,14 +291,12 @@ async def populate_characters(
             if raw_shared_skill_upgrade.cost
             for item in raw_shared_skill_upgrade.cost
         ],
+    ).on_conflict(
+        action="DO UPDATE",
+        target=(
+            # A given elite phase can only contain the same item type once.
+            database.SkillSharedUpgradeItem.upgrade,
+            database.SkillSharedUpgradeItem.item,
+        ),
+        values=database.all_columns_but_pk(database.SkillSharedUpgradeItem),
     )
-    # TODO: fix constraint and uncomment
-    # .on_conflict(
-    #     action="DO UPDATE",
-    #     target=(
-    #         # A given elite phase can only contain the same item type once.
-    #         database.SkillSharedUpgradeItem.upgrade,
-    #         database.SkillSharedUpgradeItem.item,
-    #     ),
-    #     values=[database.SkillSharedUpgradeItem.quantity]
-    # )

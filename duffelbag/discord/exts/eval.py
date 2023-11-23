@@ -19,7 +19,7 @@ import types
 import typing
 
 import disnake
-from disnake.ext import commands, plugins
+from disnake.ext import commands, components, plugins
 
 import database
 from duffelbag.discord import config
@@ -117,6 +117,7 @@ async def eval_listener(message: disnake.Message) -> None:
             "typing": typing,
             "disnake": disnake,
             "commands": commands,
+            "components": components,
             "database": database,
         }
 

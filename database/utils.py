@@ -10,7 +10,12 @@ __all__: typing.Sequence[str] = (
     "all_columns_but_pk",
     "get_db",
     "rollback_transaction",
+    "bulk_insert",
 )
+
+T = typing.TypeVar("T")
+
+PSQL_QUERY_ALLOWED_MAX_ARGS = 32767
 
 
 class _MetaTable(table.Table):
@@ -43,3 +48,22 @@ def all_columns_but_pk(table_: type[table.Table], /) -> list[columns.Column]:
         for col in table_._meta.columns  # noqa: SLF001
         if col is not table_._meta.primary_key  # noqa: SLF001
     ]
+
+
+def batched(sequence: typing.Sequence[T], size: int) -> typing.Iterator[typing.Sequence[T]]:
+    stop = len(sequence)
+    for i in range(0, stop, size):
+        yield sequence[i : i + size]
+
+
+async def bulk_insert(*rows: table.Table) -> None:
+    """Insert rows by batching them such that the number of args doesn't exceed the maximum."""
+    if not rows:
+        return
+
+    table_cls = type(rows[-1])
+    max_args = len(table_cls.all_columns())
+    batch_size = PSQL_QUERY_ALLOWED_MAX_ARGS // max_args
+
+    for batch in batched(rows, batch_size):
+        await table_cls.insert(*batch)

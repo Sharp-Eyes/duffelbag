@@ -211,7 +211,7 @@ async def schedule_user_deletion(
     deletion_ts = now + datetime.timedelta(seconds=DELETION_GRACE_PERIOD_SECONDS)
 
     scheduled_deletion = database.ScheduledUserDeletion(
-        user=duffelbag_user.id,
+        duffelbag_id=duffelbag_user.id,
         deletion_ts=deletion_ts,
     )
     try:
@@ -267,8 +267,8 @@ async def schedule_arknights_user_deletion(
     deletion_ts = now + datetime.timedelta(seconds=DELETION_GRACE_PERIOD_SECONDS)
 
     scheduled_deletion = database.ScheduledArknightsUserDeletion(
-        user=duffelbag_user.id,
-        arknights_user=arknights_user.id,
+        duffelbag_id=duffelbag_user.id,
+        arknights_id=arknights_user.id,
         deletion_ts=deletion_ts,
     )
     try:
@@ -493,7 +493,7 @@ async def add_platform_account(
         account.
     """
     platform_user = database.PlatformUser(
-        user=duffelbag_user.id,
+        duffelbag_id=duffelbag_user.id,
         platform_id=platform_id,
         platform_name=platform.value,
     )
@@ -758,7 +758,7 @@ async def add_arknights_account(
     )  # fmt: skip
 
     new_user = database.ArknightsUser(
-        user=duffelbag_user.id,
+        duffelbag_id=duffelbag_user.id,
         channel_uid=channel_uid,
         yostar_token=token,
         game_uid=game_uid,

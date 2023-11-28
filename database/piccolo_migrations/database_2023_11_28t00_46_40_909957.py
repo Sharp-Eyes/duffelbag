@@ -2,10 +2,9 @@ from piccolo import table
 from piccolo.apps.migrations.auto.migration_manager import MigrationManager
 
 
-ID = "2023-11-23T20:35:19:406775"
+ID = "2023-11-28T00:46:40:909957"
 VERSION = "1.1.1"
-DESCRIPTION = "Add composite unique constraints to static models."
-
+DESCRIPTION = "Add composite unique constraints to static models"
 
 # This is just a dummy table we use to execute raw SQL with:
 class RawTable(table.Table):

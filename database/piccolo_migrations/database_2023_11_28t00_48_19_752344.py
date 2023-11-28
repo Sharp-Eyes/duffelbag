@@ -2,9 +2,9 @@ from piccolo import table
 from piccolo.apps.migrations.auto.migration_manager import MigrationManager
 
 
-ID = "2023-11-23T20:29:04:360182"
+ID = "2023-11-28T00:48:19:752344"
 VERSION = "1.1.1"
-DESCRIPTION = "Add composite unique constraints to static models"
+DESCRIPTION = "Add composite unique constraints to user-data models"
 
 
 # This is just a dummy table we use to execute raw SQL with:
@@ -63,4 +63,3 @@ async def forwards():
     manager.add_raw_backwards(run_backwards)  # type: ignore
 
     return manager
-

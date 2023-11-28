@@ -7,14 +7,14 @@ basis.
 
 from piccolo import columns, table
 
-from database.models import auth
+from database.models import auth, static
 
 
 class UserCharacter(table.Table):
     """The database representation of a character on the Arknights API."""
 
     id: columns.Serial
-    character_id = columns.Varchar(20)
+    character_id = columns.ForeignKey(references=static.StaticCharacter)
     user_id = columns.ForeignKey(references=auth.ArknightsUser)
     main_skill_lvl = columns.SmallInt()
     level = columns.SmallInt()
@@ -30,7 +30,7 @@ class UserCharacterSkill(table.Table):
     """The database representation of a character's skill on the Arknights API."""
 
     id: columns.Serial
-    skill_id = columns.Varchar(20)
+    skill_id = columns.ForeignKey(references=static.StaticSkill)
     user_character_id = columns.ForeignKey(references=UserCharacter)
     specialize_level = columns.SmallInt()
 

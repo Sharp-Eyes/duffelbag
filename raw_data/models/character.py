@@ -16,6 +16,17 @@ T = typing.TypeVar("T")
 Sequence = typing.Annotated[typing.Sequence[T], pydantic.AfterValidator(tuple)]
 
 
+def _removeprefix_validator(prefix: str) -> pydantic.BeforeValidator:
+    def _strip(target: str) -> str:
+        return target.removeprefix(prefix)
+
+    return pydantic.BeforeValidator(_strip)
+
+
+PhaseValidator = _removeprefix_validator("PHASE_")
+RarityValidator = _removeprefix_validator("TIER_")
+
+
 class RawCharacterAttributes(pydantic.BaseModel, frozen=True):
     HP: int = pydantic.Field(alias="maxHp")
     ATK: int = pydantic.Field(alias="atk")
@@ -48,14 +59,14 @@ class RawPhase(pydantic.BaseModel, frozen=True):  # TODO: rename?
 
 
 class RawUnlockCondition(pydantic.BaseModel, frozen=True):
-    elite_level: int = pydantic.Field(alias="phase")
+    elite_level: typing.Annotated[int, PhaseValidator] = pydantic.Field(alias="phase")
     level: int
 
 
 class RawSkillCost(pydantic.BaseModel, frozen=True):
     """Gamedata model containing character skill mastery cost information."""
 
-    unlock_condition: RawUnlockCondition = pydantic.Field("unlockCond")
+    unlock_condition: RawUnlockCondition = pydantic.Field(alias="unlockCond")
     training_time: int = pydantic.Field(alias="lvlUpTime")
     cost: Sequence[RawItem] | None = pydantic.Field(alias="levelUpCost")
 
@@ -80,7 +91,7 @@ class RawTalent(pydantic.BaseModel, frozen=True):
 
 
 class RawPotential(pydantic.BaseModel, frozen=True):  # bit of a shitty class
-    type: int  # TODO: probably unnecessary.
+    type: str  # TODO: probably unnecessary.
     description: str
 
 
@@ -98,7 +109,7 @@ class RawCharacter(pydantic.BaseModel, frozen=True):
     description: str
     position: str
     tags: Sequence[str] = pydantic.Field(alias="tagList")
-    rarity: int
+    rarity: typing.Annotated[int, RarityValidator]
     profession: str
     sub_profession: str = pydantic.Field(alias="subProfessionId")
     is_alter: bool = pydantic.Field(alias="isSpChar")

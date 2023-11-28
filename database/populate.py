@@ -37,6 +37,7 @@ async def populate_tags(
     )
 
 
+# TODO: Localisation.
 async def populate_items(
     raw_items: typing.Sequence[raw_data.RawItem] | None = None,
     *,
@@ -111,7 +112,7 @@ async def populate_characters(
 
     characters: list[database.StaticCharacter] = []
     tags: list[database.StaticCharacterTag] = []
-    skills: dict[database.StaticSkill, raw_data.RawCharacterSkill] = {}
+    skills: dict[database.StaticCharacterSkill, raw_data.RawCharacterSkill] = {}
     elite_phases: dict[database.StaticCharacterElitePhase, raw_data.RawPhase] = {}
     shared_skill_upgrades: dict[database.StaticSkillSharedUpgrade, raw_data.RawSharedSkillCost] = {}
 
@@ -136,12 +137,13 @@ async def populate_characters(
         )
 
         skills |= {
-            database.StaticSkill(
+            database.StaticCharacterSkill(
                 character_id=character.id,
                 skill_id=skill.id,
-                display_id=skill.display_id,
+                skill_num=num,
+                display_id=skill.display_id or skill.id,
             ): skill
-            for skill in raw_character.skills
+            for num, skill in enumerate(raw_character.skills, start=1)
         }
 
         # TODO: (maybe) store E0
@@ -181,11 +183,11 @@ async def populate_characters(
     )  # fmt: skip
 
     await (
-        database.StaticSkill.insert(*skills.keys())
+        database.StaticCharacterSkill.insert(*skills.keys())
         .on_conflict(
             action="DO UPDATE",
-            target=database.StaticSkill.id,
-            values=database.all_columns_but_pk(database.StaticSkill),
+            target=database.StaticCharacterSkill.id,
+            values=database.all_columns_but_pk(database.StaticCharacterSkill),
         )
     )  # fmt: skip
 
@@ -299,3 +301,84 @@ async def populate_characters(
         ),
         values=database.all_columns_but_pk(database.StaticSkillSharedUpgradeItem),
     )
+
+
+async def populate_skills(
+    raw_skills: typing.Sequence[raw_data.RawSkill] | None = None,
+    *,
+    locale: str = "en_US",
+    clean: bool = False,
+) -> None:
+    """Populate the 'static_skill' table in the database along with all its dependencies.
+
+    Parameters
+    ----------
+    raw_skills:
+        The raw skill data to process into database rows. If not provided,
+        the skills will be fetched anew.
+    locale:
+        The locale for which to store skill information.
+    clean:
+        Whether to clear the aforementioned tables before repopulating them.
+        This could be used to get rid of any stale/removed items (probably
+        never needed).
+        More useful is that it ensures no duplicate meta-entries are created
+        while we wait for composite unique constraints to be added to piccolo.
+    """
+    if not raw_skills:
+        raw_skills = await raw_data.fetch_skills()
+
+    if clean:
+        await database.StaticSkill.delete(force=True)
+
+    skills = [
+        database.StaticSkill(
+            id=skill.id,
+            skill_type=skill.levels[0].skill_type,
+            duration_type=skill.levels[0].duration_type,
+            sp_type=skill.levels[0].sp_data.type,
+        )
+        for skill in raw_skills
+    ]
+    await database.StaticSkill.insert(*skills)
+
+    skill_levels: dict[database.StaticSkillLevel, raw_data.RawSkillLevel] = {}
+    skill_localisations: list[database.StaticSkillLocalisation] = []
+
+    for skill, raw_skill in zip(skills, raw_skills, strict=True):
+        skill_levels |= {
+            database.StaticSkillLevel(
+                skill_id=skill.id,
+                sp_cost=level.sp_data.cost,
+                initial_sp=level.sp_data.initial,
+                charges=level.sp_data.charges,
+                duration=level.duration,
+            ): level
+            for level in raw_skill.levels
+        }
+
+        skill_localisations.append(
+            database.StaticSkillLocalisation(
+                skill_id=skill.id,
+                locale=locale,
+                name=raw_skill.levels[0].name,
+                description=raw_skill.levels[0].description,
+            ),
+        )
+
+    await database.StaticSkillLevel.insert(*skill_levels.keys())
+    await database.StaticSkillLocalisation.insert(*skill_localisations)
+
+    skill_blackboards: list[database.StaticSkillBlackboard] = []
+
+    for skill_level, raw_skill_level in skill_levels.items():
+        skill_blackboards.extend(
+            database.StaticSkillBlackboard(
+                skill_level_id=skill_level.id,
+                key=blackboard_entry.key,
+                value=blackboard_entry.value,
+            )
+            for blackboard_entry in raw_skill_level.blackboard
+        )
+
+    await database.bulk_insert(*skill_blackboards)

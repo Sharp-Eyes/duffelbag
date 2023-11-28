@@ -18,16 +18,16 @@ _all__: typing.Sequence[str] = (
 
 # fmt: off
 _CHARACTER_DATA_URL: typing.Final[str] = (
-    "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata/excel/character_table.json"
+    "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/master/en_US/gamedata/excel/character_table.json"
 )
 _SKILL_DATA_URL: typing.Final[str] = (
-    "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata/excel/skill_table.json"
+    "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/master/en_US/gamedata/excel/skill_table.json"
 )
 _ITEM_DATA_URL: typing.Final[str] = (
-    "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata/excel/item_table.json"
+    "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/master/en_US/gamedata/excel/item_table.json"
 )
 _TAG_DATA_URL: typing.Final[str] = (
-    "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata/excel/gacha_table.json"
+    "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/master/en_US/gamedata/excel/gacha_table.json"
 )
 # fmt: on
 
@@ -88,7 +88,7 @@ async def fetch_skills(
     return [
         models.RawSkill(**skill)
         for id_, skill in data.items()
-        if id_.startswith(("skchr", "skcom"))
+        if id_.startswith("skchr")
     ]  # fmt: skip
 
 

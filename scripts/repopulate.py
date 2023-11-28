@@ -12,6 +12,9 @@ async def _main() -> None:
     print("Repopulating tags...")
     await database.populate_tags(clean=True)
 
+    print("Repopulating skills...")
+    await database.populate_skills(clean=True)
+
     print("Repopulating characters...")
     await database.populate_characters(clean=True)
 

@@ -1,50 +1,47 @@
-[tool.poetry]
+[project]
 name = "duffelbag"
 version = "0.1.0"
-description = ""
-authors = ["Chromosomologist <chromosomologist@gmail.com>"]
+description = "Add your description here"
 readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "argon2-cffi>=23.1.0",
+    "arkprts",
+    "coloredlogs>=15.0.1",
+    "piccolo[postgres]>=1.22.0",
+    "python-dotenv>=1.0.1",
+    "rapidfuzz>=3.10.1",
+]
 
-
-[tool.poetry.dependencies]
-python = "^3.11"
-python-dotenv = "^0.21.0"
-arkprts = {git = "https://github.com/thesadru/arkprts"}
-piccolo = {version = "^1.1.1", extras = ["postgres"]}
-argon2-cffi = "^21.3.0"
-coloredlogs = "^15.0.1"
-rapidfuzz = "^3.5.2"
-
-
-[tool.poetry.group.dev.dependencies]
-devtools = "^0.11.0"
-ruff = "^0.8.0"
-pre-commit = "^3.3.2"
-pyright = "^1.1.337"
-slotscheck = "^0.17.0"
-
-
-[tool.poetry.group.discord.dependencies]
-disnake = "^2.9.0"
-disnake-ext-plugins = {git = "https://github.com/DisnakeCommunity/disnake-ext-plugins"}
-disnake-ext-components = {git = "https://github.com/DisnakeCommunity/disnake-ext-components", rev = "docs"}
-
-
-[tool.poetry.group.speedups.dependencies]
-uvloop = "^0.17.0"
-orjson = "^3.8.14"
-
-
-[tool.poetry.scripts]
-"repopulate" = "scripts.repopulate:_sync_main"
-
+[project.optional-dependencies]
+discord = [
+    "hikari>=2.1.0",
+    "hikari-ryoshu",
+    "hikari-tanjun>=2.17.6",
+]
+speedups = [
+    "orjson>=3.10.12",
+    "uvloop>=0.21.0",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
+[tool.uv]
+dev-dependencies = [
+    "pre-commit>=4.0.1",
+    "pyright>=1.1.389",
+    "ruff>=0.8.0",
+    "slotscheck>=0.19.1",
+]
+
+[tool.uv.sources]
+arkprts = { git = "https://github.com/thesadru/arkprts" }
+hikari-ryoshu = { git = "https://github.com/sharp-eyes/hikari-ryoshu" }
 
 [tool.pyright]
+pythonVersion = "3.11"
 exclude = [
     "**/node_modules",
     "**/__pycache__",

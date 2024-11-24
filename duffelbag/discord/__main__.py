@@ -19,7 +19,7 @@ from duffelbag.discord import bot, config, exts, localisation, manager
 
 @typing.runtime_checkable
 class _ExtensionAware(typing.Protocol):
-    def setup(self, __bot: commands.Bot) -> None:
+    def setup(self, bot: commands.Bot, /) -> None:
         ...
 
 
@@ -60,7 +60,13 @@ def _make_intents() -> disnake.Intents:
     if config.BOT_CONFIG.DISCORD_IS_PROD:
         return disnake.Intents.none()
 
-    return disnake.Intents.messages | disnake.Intents.guild_messages
+    return (
+        disnake.Intents.messages
+        | disnake.Intents.guild_messages
+        | disnake.Intents.guilds
+        | disnake.Intents.voice_states
+        | disnake.Intents.message_content
+    )
 
 
 def _make_sync_flags() -> commands.CommandSyncFlags:
@@ -83,8 +89,6 @@ async def _main() -> None:
     log.initialise()
     localisation.initialise(duffelbag)
     manager.initialise()
-
-    assert components.check_manager("duffelbag")
 
     for ext in _discover_exts():
         duffelbag.load_extension(ext)

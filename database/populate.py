@@ -21,6 +21,7 @@ async def populate_tags(
     clean:
         Whether to clear the 'tag' table before repopulating it. This could be
         used to get rid of any stale/removed tags (probably never needed).
+
     """
     if not raw_tags:
         raw_tags = await raw_data.fetch_tags()
@@ -53,6 +54,7 @@ async def populate_items(
     clean:
         Whether to clear the 'item' table before repopulating it. This could be
         used to get rid of any stale/removed items (probably never needed).
+
     """
     if not raw_items:
         raw_items = await raw_data.fetch_items()
@@ -102,6 +104,7 @@ async def populate_characters(
         never needed).
         More useful is that it ensures no duplicate meta-entries are created
         while we wait for composite unique constraints to be added to piccolo.
+
     """
     if not raw_characters:
         raw_characters = await raw_data.fetch_characters()
@@ -324,6 +327,7 @@ async def populate_skills(
         never needed).
         More useful is that it ensures no duplicate meta-entries are created
         while we wait for composite unique constraints to be added to piccolo.
+
     """
     if not raw_skills:
         raw_skills = await raw_data.fetch_skills()
@@ -353,8 +357,9 @@ async def populate_skills(
                 initial_sp=level.sp_data.initial,
                 charges=level.sp_data.charges,
                 duration=level.duration,
+                level=level_num,
             ): level
-            for level in raw_skill.levels
+            for level_num, level in enumerate(raw_skill.levels, start=1)
         }
 
         skill_localisations.append(
@@ -366,7 +371,7 @@ async def populate_skills(
             ),
         )
 
-    await database.StaticSkillLevel.insert(*skill_levels.keys())
+    await database.bulk_insert(*skill_levels.keys())
     await database.StaticSkillLocalisation.insert(*skill_localisations)
 
     skill_blackboards: list[database.StaticSkillBlackboard] = []

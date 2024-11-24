@@ -13,11 +13,12 @@ arkprts = {git = "https://github.com/thesadru/arkprts"}
 piccolo = {version = "^1.1.1", extras = ["postgres"]}
 argon2-cffi = "^21.3.0"
 coloredlogs = "^15.0.1"
+rapidfuzz = "^3.5.2"
 
 
 [tool.poetry.group.dev.dependencies]
 devtools = "^0.11.0"
-ruff = "^0.0.289"
+ruff = "^0.8.0"
 pre-commit = "^3.3.2"
 pyright = "^1.1.337"
 slotscheck = "^0.17.0"
@@ -26,7 +27,7 @@ slotscheck = "^0.17.0"
 [tool.poetry.group.discord.dependencies]
 disnake = "^2.9.0"
 disnake-ext-plugins = {git = "https://github.com/DisnakeCommunity/disnake-ext-plugins"}
-disnake-ext-components = {git = "https://github.com/DisnakeCommunity/disnake-ext-components", rev = "rewrite"}
+disnake-ext-components = {git = "https://github.com/DisnakeCommunity/disnake-ext-components", rev = "docs"}
 
 
 [tool.poetry.group.speedups.dependencies]
@@ -66,10 +67,9 @@ extend-exclude = [
     "database/piccolo_migrations",
 ]
 
+[tool.ruff.lint]
 select = ["ALL"]
 ignore = [
-    # `self` and `cls` do not need annotations.
-    "ANN101", "ANN102",
     # Magic methods do not need documentation.
     "D105",
     # Class docstrings are at the class level.
@@ -92,7 +92,8 @@ ignore = [
 [tool.ruff.per-file-ignores]
 # Allow printing in scripts.
 "scripts/*" = ["T201"]
-# Wildcard imports are fine in __init__; more convenient than duplicating exports and maintaining them.
+# Wildcard imports are fine in __init__ and more convenient than duplicating
+# exports and maintaining them.
 "__init__.py" = ["F403", "F405"]
 # Code lying in wait for composite unique constraints.
 "database/populate.py" = ["ERA"]

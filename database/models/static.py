@@ -31,6 +31,7 @@ class StaticSkillLevel(table.Table):
     initial_sp = columns.SmallInt()
     charges = columns.SmallInt()
     duration = columns.Decimal(digits=(8, 4))
+    level = columns.SmallInt()
 
 
 class StaticSkillBlackboard(table.Table):

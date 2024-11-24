@@ -28,16 +28,6 @@ plugin = plugins.Plugin()
 manager = components.get_manager("duffelbag.restricted")
 
 
-class _StringListParser(components.parser.Parser[list[str]]):
-    # TODO: Implement list support into ext-components :trol:
-
-    def loads(self, _: disnake.Interaction, arg: str) -> list[str]:
-        return arg.split(",")
-
-    def dumps(self, arg: list[str]) -> str:
-        return ",".join(arg)
-
-
 class _PosToFormatMap(dict[str, object]):
     # HACK: dict that returns positional items when __getitem__'d, such that
     #       str.format_map can take positional arguments. This is done so that
@@ -61,12 +51,12 @@ class ExpandButton(components.RichButton):
     """A button that toggles a message between expanded and collapsed state."""
 
     # Start collapsed, so show expand label and emoji.
-    label: str = _EXPAND[0]
-    emoji: str = _EXPAND[1]
+    label: str | None = _EXPAND[0]
+    emoji: str | disnake.Emoji | disnake.PartialEmoji | None = _EXPAND[1]
 
     # Custom id params:
     key_base: str
-    params: list[str] = components.field(parser=_StringListParser())
+    params: list[str]
     collapsed: bool = True
 
     def _format(self, string: str) -> str:
@@ -89,8 +79,9 @@ class ExpandButton(components.RichButton):
         #       no risk of unformatted keys appearing in the output, either.
         message = localisation.localise(self.key_base + key_ext, inter.locale, strict=False)
 
+        message_components, _ = await manager.parse_message_components(inter.message)
         # TODO: Don't just consume existing components.
-        await inter.response.edit_message(self._format(message), components=self)
+        await inter.response.edit_message(self._format(message), components=message_components)
 
 
 setup, teardown = plugin.create_extension_handlers()

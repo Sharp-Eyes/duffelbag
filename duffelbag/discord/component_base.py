@@ -10,9 +10,23 @@ from disnake.ext import components
 import database
 from duffelbag import auth, shared
 
-__all__: typing.Sequence[str] = ("ArknightsAccountSelect",)
+__all__: typing.Sequence[str] = ("ArknightsAccountSelect", "StringListParser")
 
 _ServerToApiUserDict = dict[arkprts.ArknightsServer, typing.Sequence[arkprts.models.PartialPlayer]]
+
+
+class StringListParser(components.parser.Parser[list[str]]):
+    """Parser class that parses to/from a list of strings."""
+
+    # TODO: Implement list support into ext-components :trol:
+
+    def loads(self, _: disnake.Interaction, arg: str) -> list[str]:
+        """Load a string into a list of strings."""
+        return arg.split(",")
+
+    def dumps(self, arg: list[str]) -> str:
+        """Dump a list of strings into a string."""
+        return ",".join(arg)
 
 
 class ArknightsAccountSelect(components.RichStringSelect, typing.Protocol):
@@ -22,7 +36,7 @@ class ArknightsAccountSelect(components.RichStringSelect, typing.Protocol):
 
     sep: typing.ClassVar[str] = "|"
 
-    placeholder: str = "Select an account..."
+    placeholder: str | None = "Select an account..."
     min_values: int = 1
     max_values: int = 1
 

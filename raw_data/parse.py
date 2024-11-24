@@ -47,6 +47,7 @@ async def fetch_characters(
     -------
     Sequence[:class:`models.RawCharacter`]
         The parsed character models.
+
     """
     if not session:
         async with aiohttp.ClientSession() as session:
@@ -77,6 +78,7 @@ async def fetch_skills(
     -------
     Sequence[:class:`models.RawSkill`]
         The parsed skill models.
+
     """
     if not session:
         async with aiohttp.ClientSession() as session:
@@ -88,7 +90,7 @@ async def fetch_skills(
     return [
         models.RawSkill(**skill)
         for id_, skill in data.items()
-        if id_.startswith("skchr")
+        if id_.startswith(("skchr", "skcom"))
     ]  # fmt: skip
 
 
@@ -107,6 +109,7 @@ async def fetch_items(
     -------
     Sequence[:class:`models.RawSkill`]
         The parsed item models.
+
     """
     if not session:
         async with aiohttp.ClientSession() as session:
@@ -119,8 +122,8 @@ async def fetch_items(
         models.RawItem(**item)
         for _, item in data["items"].items()
         if (
-            item["classifyType"] == "MATERIAL" and item["itemType"] == "MATERIAL"
-            or item["classifyType"] == "NORMAL" and item["itemType"] == "GOLD"
+            (item["classifyType"] == "MATERIAL" and item["itemType"] == "MATERIAL")
+            or (item["classifyType"] == "NORMAL" and item["itemType"] == "GOLD")
         )  # fmt: skip
     ]
 
@@ -140,6 +143,7 @@ async def fetch_tags(
     -------
     Sequence[:class:`models.RawSkill`]
         The parsed tag models.
+
     """
     if not session:
         async with aiohttp.ClientSession() as session:
@@ -170,6 +174,7 @@ async def fetch_all(
     -------
     tuple[Sequence[:class:`models.RawCharacter`], Sequence[:class:`models.RawCharacter`], Sequence[:class:`models.RawItem`], Sequence[:class:`models.RawTag`]
         The parsed models.
+
     """  # noqa: E501
     if not session:
         async with aiohttp.ClientSession() as session:

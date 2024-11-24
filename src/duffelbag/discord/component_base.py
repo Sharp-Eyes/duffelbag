@@ -1,35 +1,22 @@
 """Shared component base classes for duffelbag."""
 
+import abc
 import asyncio
 import typing
 
 import arkprts
-import disnake
-from disnake.ext import components
+import hikari
+import ryoshu
 
 import database
 from duffelbag import auth, shared
 
-__all__: typing.Sequence[str] = ("ArknightsAccountSelect", "StringListParser")
+__all__: typing.Sequence[str] = ("ArknightsAccountSelect",)
 
 _ServerToApiUserDict = dict[arkprts.ArknightsServer, typing.Sequence[arkprts.models.PartialPlayer]]
 
 
-class StringListParser(components.parser.Parser[list[str]]):
-    """Parser class that parses to/from a list of strings."""
-
-    # TODO: Implement list support into ext-components :trol:
-
-    def loads(self, _: disnake.Interaction, arg: str) -> list[str]:
-        """Load a string into a list of strings."""
-        return arg.split(",")
-
-    def dumps(self, arg: list[str]) -> str:
-        """Dump a list of strings into a string."""
-        return ",".join(arg)
-
-
-class ArknightsAccountSelect(components.RichStringSelect, typing.Protocol):
+class ArknightsAccountSelect(ryoshu.ManagedTextSelectMenu, abc.ABC):
     """Select menu base class to pick an Arknights account."""
 
     # TODO: Pagination? Limit accounts to 25? Who knows.
@@ -45,15 +32,15 @@ class ArknightsAccountSelect(components.RichStringSelect, typing.Protocol):
         cls,
         account: database.ArknightsUser,
         display_name: str | None = None,
-    ) -> disnake.SelectOption:
+    ) -> hikari.impl.SelectOptionBuilder:
         """Make a SelectOption for this select given an ArknightsUser."""
         if not display_name:
             display_name = account.game_uid
 
-        return disnake.SelectOption(
+        return hikari.impl.SelectOptionBuilder(
             label=f"{display_name} [{account.server}]",
             value=f"{account.server}{cls.sep}{account.game_uid}",
-            default=account.active,
+            is_default=account.active,
         )
 
     @classmethod
@@ -88,7 +75,7 @@ class ArknightsAccountSelect(components.RichStringSelect, typing.Protocol):
             ),
         )
 
-        options: list[disnake.SelectOption] = []
+        options: list[hikari.impl.SelectOptionBuilder] = []
         for server, accounts in accounts_by_server.items():
             user_data = users_by_server[server]
             for account, user in zip(accounts, user_data, strict=True):
@@ -101,7 +88,7 @@ class ArknightsAccountSelect(components.RichStringSelect, typing.Protocol):
 
         if len(options) == 1:
             # If there's only one option, ensure it can be clicked.
-            options[0].default = False
+            options[0].set_is_default(False)
 
         return cls(options=options)
 
@@ -112,7 +99,7 @@ class ArknightsAccountSelect(components.RichStringSelect, typing.Protocol):
         return await cls.from_arknights_accounts(arknights_accounts)
 
     @classmethod
-    async def get_selected_user(cls, inter: disnake.MessageInteraction) -> database.ArknightsUser:
+    async def get_selected_user(cls, inter: hikari.ComponentInteraction) -> database.ArknightsUser:
         """Get the selected Arknights user from an interaction."""
         assert inter.values  # min_values is 1 so cannot be none.
 

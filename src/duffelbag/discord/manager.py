@@ -1,21 +1,21 @@
-"""Utilities for components."""
+"""Utilities for ryoshu."""
 
 import asyncio
 import typing
 
-import disnake
-from disnake.ext import components
+import hikari
+import ryoshu
+import tanjun
 
 from duffelbag import log
-from duffelbag.discord import localisation
 
 _LOGGER = log.get_logger(__name__)
 
 
 async def log_callback_result(
-    manager: components.ComponentManager,
-    component: components.api.RichComponent,
-    _inter: disnake.Interaction,
+    manager: ryoshu.ComponentManager,
+    component: ryoshu.api.ManagedComponent,
+    _event: hikari.InteractionCreateEvent,
 ) -> typing.AsyncGenerator[None, None]:
     """Log the callback result for *all* component interactions."""
     try:
@@ -46,12 +46,13 @@ async def log_callback_result(
 
 
 async def handle_component_exception(
-    _manager: components.ComponentManager,
-    _component: components.api.RichComponent,
-    inter: disnake.Interaction,
+    _manager: ryoshu.ComponentManager,
+    _component: ryoshu.api.ManagedComponent,
+    event: hikari.InteractionCreateEvent,
     exception: Exception,
 ) -> bool:
     """Handle component exceptions by notifying the user and logging them."""
+    assert isinstance(event.interaction, hikari.ComponentInteraction)
     params = {}
 
     match exception:
@@ -63,9 +64,11 @@ async def handle_component_exception(
 
     # We intentionally use inter.send here as we don't know whether or not the
     # interaction has been responded to before.
-    await inter.send(
-        localisation.localise(key, inter.locale, format_map=params),
-        ephemeral=True,
+    await event.interaction.create_initial_response(
+        response_type=hikari.ResponseType.MESSAGE_CREATE,
+        content=key,
+        # localisation.localise(key, interaction.locale, format_map=params),
+        flags=hikari.MessageFlag.EPHEMERAL,
     )
 
     # Let the default manager implementation log the exception.
@@ -73,22 +76,24 @@ async def handle_component_exception(
 
 
 async def component_perms(
-    manager: components.ComponentManager,
-    component: components.api.RichComponent,
-    inter: disnake.Interaction,
+    manager: ryoshu.ComponentManager,
+    component: ryoshu.api.ManagedComponent,
+    event: hikari.InteractionCreateEvent,
 ) -> typing.AsyncGenerator[None, None]:
-    """Check permissions for components on this manager."""
-    _LOGGER.trace(
-        "Checking permissions for user %r w.r.t. component %r.",
-        inter.author.id,
-        type(component).__name__,
-    )
+    """Check permissions for ryoshu on this manager."""
+    interaction = event.interaction
 
-    if not isinstance(inter, disnake.MessageInteraction):
+    if not isinstance(interaction, hikari.ComponentInteraction):
         msg = f"Manager {manager.name!r} only supports message interactions."
         raise TypeError(msg)
 
-    source_interaction = inter.message.interaction
+    _LOGGER.trace(
+        "Checking permissions for user %r w.r.t. component %r.",
+        interaction.user.id,
+        type(component).__name__,
+    )
+
+    source_interaction = interaction.message.interaction
 
     if not source_interaction:
         # The message wasn't sent by a slash command, so we can't do automatic
@@ -100,17 +105,23 @@ async def component_perms(
         yield
         return
 
-    if (
-        inter.guild  # Bypass permission checks in DMs,
-        and isinstance(inter.author, disnake.Member)  # Member assertion, as we're not in DMs,
-        and source_interaction.author != inter.author  # Allow only the original command author,
-        and not inter.author.guild_permissions.manage_messages  # Allow anyone with manage_messages permissions,  # noqa: E501
-    ):
-        _LOGGER.trace("Permissions check failed.")
+    guild = interaction.get_guild()
+    if guild:  # Ensure we're in a guild.
+        channel = interaction.get_channel()
+        assert channel
+        assert isinstance(interaction.user, hikari.Member)
 
-        # TODO: Custom exception!
-        msg = "You are not allowed to use this component!"
-        raise RuntimeError(msg)
+        permissions = tanjun.permissions.calculate_permissions(interaction.user, guild, guild.get_roles())
+
+        if not (
+            source_interaction.user != interaction
+            or permissions & hikari.Permissions.MANAGE_MESSAGES
+        ):
+            _LOGGER.trace("Permissions check failed.")
+
+            # TODO: Custom exception!
+            msg = "You are not allowed to use this component!"
+            raise RuntimeError(msg)
 
     _LOGGER.trace("Permissions check succeeded.")
     yield
@@ -118,11 +129,11 @@ async def component_perms(
 
 def initialise() -> None:
     """Initialise component managers."""
-    duffelbag_manager = components.get_manager("duffelbag")
+    duffelbag_manager = ryoshu.get_manager("duffelbag")
     duffelbag_manager.as_callback_wrapper(log_callback_result)
     duffelbag_manager.as_exception_handler(handle_component_exception)
 
-    restricted_manager = components.get_manager("duffelbag.restricted")
+    restricted_manager = ryoshu.get_manager("duffelbag.restricted")
     restricted_manager.as_callback_wrapper(component_perms)
 
     _LOGGER.trace("Successfully initialised component managers.")

@@ -58,14 +58,17 @@ async def _main() -> None:
     async with _make_client_session() as session:
         _make_guest_client(session)
 
-        _client = (
+        client = (
             tanjun.Client.from_gateway_bot(duffelbag, declare_global_commands=True)
             .set_type_dependency(aiohttp.ClientSession, session)
             .add_client_callback(tanjun.ClientCallbackNames.COMPONENT_ADDED, localisation.repopulate_command_mentions)
             .add_client_callback(tanjun.ClientCallbackNames.COMPONENT_REMOVED, localisation.repopulate_command_mentions)
+            .load_modules("duffelbag.discord.exts.auth")
         )
 
         await duffelbag.start()
+        await localisation.repopulate_command_mentions(client)
+        await duffelbag.join()
 
 
 

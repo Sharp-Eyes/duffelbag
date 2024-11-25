@@ -2,6 +2,7 @@
 
 import typing
 
+import hikari
 import tanjun
 
 from duffelbag import localisation as base_localisation
@@ -12,10 +13,16 @@ _LOGGER = log.get_logger(__name__)
 _COMMAND_MENTION_LOCALISATIONS: dict[str, dict[str, str]] = {}
 
 
-async def repopulate_command_mentions(client: tanjun.Client) -> None:
+async def repopulate_command_mentions(source: tanjun.abc.Client | tanjun.Component) -> None:
     """Repopulate the internal cache for slash command mentions."""
     _LOGGER.trace("(Re)populating slash command mentions...")
     _COMMAND_MENTION_LOCALISATIONS.clear()
+
+    if isinstance(source, tanjun.abc.Client):
+        client = source
+    else:
+        client = source.client
+        assert client is not None
 
     for locale in base_localisation.LOCALISATION_DATA:
         _COMMAND_MENTION_LOCALISATIONS[locale] = {}
@@ -35,12 +42,14 @@ async def repopulate_command_mentions(client: tanjun.Client) -> None:
 
                 _COMMAND_MENTION_LOCALISATIONS[locale][key] = value
 
+    _LOGGER.warning(_COMMAND_MENTION_LOCALISATIONS)
+
     _LOGGER.trace("Slash command mention (re)population complete.")
 
 
 def localise(
     key: str,
-    locale: str,
+    locale: str | hikari.Locale,
     *,
     strict: bool = True,
     format_map: dict[str, object] | None = None,
@@ -74,6 +83,9 @@ def localise(
 
     if format_map is None:
         format_map = {}
+
+    if isinstance(locale, hikari.Locale):
+        locale = locale.value
 
     format_map |= _COMMAND_MENTION_LOCALISATIONS[locale]
 

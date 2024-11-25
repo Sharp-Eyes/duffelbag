@@ -22,6 +22,9 @@ _EMAIL_REGEX: typing.Final[typing.Pattern[str]] = re.compile(
     r"^(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|\"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*\")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9]))\.){3}(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9])|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])$",
 )
 
+_USER_DESC = f"The username to use. Must be between {auth.MIN_USER_LEN} and {auth.MAX_USER_LEN} characters long."
+_PASS_DESC = f"The password to use. Must be between {auth.MIN_PASS_LEN} and {auth.MAX_PASS_LEN} characters long."
+
 
 component = tanjun.Component(name=__name__)
 manager = ryoshu.get_manager("duffelbag.auth")
@@ -35,16 +38,6 @@ account_group = component.with_slash_command(tanjun.slash_command_group("account
 account_duffelbag_group = account_group.make_sub_group("duffelbag", "Do stuff with Duffelbag accounts.")
 account_discord_group = account_group.make_sub_group("discord", "Do stuff with Discord accounts.")
 account_arknights_group = account_group.make_sub_group("arknights", "Do stuff with Arknights accounts.")
-
-
-_USER_DESC = (
-    f"The username to use. Must be between {auth.MIN_USER_LEN} and"
-    f" {auth.MAX_USER_LEN} characters long."
-)
-_PASS_DESC = (
-    f"The password to use. Must be between {auth.MIN_PASS_LEN} and"
-    f" {auth.MAX_PASS_LEN} characters long."
-)
 
 
 @component.with_slash_command
@@ -131,9 +124,7 @@ async def account_duffelbag_delete(
         localisation.localise(
             "auth_delete_schedule",
             ctx.interaction.locale,
-            format_map={
-                "timestamp": localisation.format_timestamp(scheduled_deletion.deletion_ts, style="R"),
-            },
+            format_map={"timestamp": localisation.format_timestamp(scheduled_deletion.deletion_ts, style="R")},
         ),
         ephemeral=True,
     )
@@ -230,7 +221,7 @@ async def account_arknights_set_active(ctx: tanjun.abc.SlashContext) -> None:
 
 @component.with_slash_command
 @tanjun.with_str_slash_option("password", _PASS_DESC, min_length=auth.MIN_PASS_LEN, max_length=auth.MAX_PASS_LEN)
-@account_arknights_group.as_sub_command("set-active", "Set a different Arknights account as your active account.")
+@account_arknights_group.as_sub_command("unbind", "Unlink your Arknights account. This has a 24 hour grace period.")
 async def account_arknights_unbind(
     ctx: tanjun.abc.SlashContext,
     password: str,
@@ -262,8 +253,8 @@ class ArknightsBindButton(ryoshu.ManagedButton):
 
     style: hikari.ButtonStyle | int = hikari.ButtonStyle.SUCCESS
 
-    server: arkprts.ArknightsServer = ryoshu.field(
-        parser=ryoshu.parser.StringParser,  # pyright: ignore  # TODO: implement literal parser
+    server: arkprts.ArknightsServer = ryoshu.field(  # TODO: implement literal parser
+        parser=ryoshu.parser.StringParser(),  # pyright: ignore[reportAssignmentType]
     )
     email: str
 
@@ -355,6 +346,7 @@ class ArknightsActiveAccountSelect(component_base.ArknightsAccountSelect):
 
         await event.interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_UPDATE,
+            # TODO: Change this string in localisation file; probably provide username.
             content=localisation.localise("auth_ak_set_active_success", event.interaction.locale),
             components=None,
         )
@@ -375,11 +367,7 @@ class ArknightsRemoveAccountSelect(component_base.ArknightsAccountSelect):
             strict=True,
         )
 
-        scheduled_deletion = await auth.schedule_arknights_user_deletion(
-            duffelbag_user,
-            arknights_user,
-        )
-
+        scheduled_deletion = await auth.schedule_arknights_user_deletion(duffelbag_user, arknights_user)
         schedule_user_deletion(scheduled_deletion)
 
         await event.interaction.create_initial_response(
@@ -398,10 +386,7 @@ component.set_slash_hooks(hooks)
 
 
 @hooks.with_on_error
-async def account_error_handler(  # noqa: C901
-    ctx: tanjun.abc.SlashContext,
-    exception: Exception,
-) -> typing.Literal[True]:
+async def account_error_handler(ctx: tanjun.abc.SlashContext, exception: Exception) -> typing.Literal[True]:  # noqa: C901
     """Handle any kind of authentication exception."""
     _LOGGER.trace(
         "Handling auth exception of type %r for user %r.",

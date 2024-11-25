@@ -8,7 +8,7 @@ import orjson
 
 __all__: typing.Sequence[str] = ("LOCALISATION_DATA", "format_timestamp", "localise", "update_localisation_data")
 
-DEFAULT_LOCALE: typing.Final[str] = "en_GB"
+DEFAULT_LOCALE: typing.Final[str] = "en-GB"
 LOCALISATION_DIR: typing.Final[pathlib.Path] = pathlib.Path.cwd() / "localisation"
 LOCALISATION_DATA: dict[str, dict[str, str]] = {}
 
@@ -21,7 +21,7 @@ class _LazyFormatDict(dict[str, object]):
 def update_localisation_data() -> dict[str, dict[str, str]]:
     """Update localisation data from localisation json files."""
     for file in LOCALISATION_DIR.iterdir():
-        locale = file.stem
+        locale = file.stem.replace("_", "-")
         data = orjson.loads(file.read_text())
 
         LOCALISATION_DATA[locale] = data

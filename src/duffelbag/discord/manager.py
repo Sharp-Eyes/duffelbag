@@ -8,6 +8,7 @@ import ryoshu
 import tanjun
 
 from duffelbag import log
+from duffelbag.discord import localisation
 
 _LOGGER = log.get_logger(__name__)
 
@@ -66,8 +67,7 @@ async def handle_component_exception(
     # interaction has been responded to before.
     await event.interaction.create_initial_response(
         response_type=hikari.ResponseType.MESSAGE_CREATE,
-        content=key,
-        # localisation.localise(key, interaction.locale, format_map=params),
+        content=localisation.localise(key, event.interaction.locale, format_map=params),
         flags=hikari.MessageFlag.EPHEMERAL,
     )
 

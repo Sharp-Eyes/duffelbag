@@ -3,69 +3,60 @@
 import functools
 import typing
 
-import disnake
+import hikari
 import rapidfuzz
-from disnake.ext import commands, components, plugins
+import ryoshu
+import tanjun
 
 import database
 from duffelbag import auth, user_data
 
-plugin = plugins.Plugin()
-manager = components.get_manager("duffelbag.user")
+component = tanjun.Component(name="user")
+manager = ryoshu.get_manager("duffelbag.user")
 
 
-@plugin.slash_command(name="game-data")
-async def game_data(_: disnake.CommandInteraction) -> None:
-    """Commands to do with game-data."""
+game_data_group = component.with_slash_command(tanjun.slash_command_group("game-data", "Do stuff with game data."))
+farm_group = component.with_slash_command(tanjun.slash_command_group("farm", "Set or view farming goals."))
+farm_add_goal_group = farm_group.make_sub_group("add-goal", "Set a new farming goal.")
 
 
-@game_data.sub_command(name="sync-characters")  # type: ignore
-async def game_data_sync_characters(inter: disnake.CommandInteraction):
-    await inter.response.defer(ephemeral=True)
+@game_data_group.as_sub_command("sync-characters", "Sync your arknights characters.")
+async def game_data_sync_characters(ctx: tanjun.abc.SlashContext) -> None:
+    """Sync your arknights characters."""
+    await ctx.defer(ephemeral=True)
 
     duffelbag_user = await auth.get_user_by_platform(
         platform=auth.Platform.DISCORD,
-        platform_id=inter.author.id,
+        platform_id=ctx.author.id,
         strict=True,
     )
     arknights_user = await auth.get_active_arknights_account(duffelbag_user)
     await user_data.store_characters(arknights_user)
 
-    await inter.edit_original_message("Successfully synced your character data!")
+    await ctx.edit_last_response("Successfully synced your character data!")
 
 
-@plugin.slash_command()
-async def farm(_: disnake.CommandInteraction) -> None:
-    """Set or view farming goals."""
-
-
-@farm.sub_command_group(name="add-goal")  # pyright: ignore
-async def farm_add_goal(_: disnake.CommandInteraction) -> None:
-    """Set a new farming goal."""
-
-
-@farm_add_goal.sub_command(name="skill")  # pyright: ignore
-async def farm_add_goal_skill(
-    inter: disnake.CommandInteraction,
-    character_name: commands.String[
-        str,
-        1,
-        32,
-    ],  # W (1 char) ~ Skadi the Corrupting Heart (26 chars).
-) -> None:
+@tanjun.with_str_slash_option(
+    "character_name",
+    "The character for whom you wish to farm a mastery.",
+    min_length=1,  # W (1 char) ~ Skadi the Corrupting Heart (26 chars).
+    max_length=32,
+)
+@farm_add_goal_group.as_sub_command("skill", "Add a skill mastery to your farming goals.")
+async def farm_add_goal_skill(ctx: tanjun.abc.SlashContext, character_name: str) -> None:
     """Add a skill mastery to your farming goals.
 
     Parameters
     ----------
-    inter:
+    ctx:
         The interaction from discord.
-    character:
+    character_name:
         The character for whom you wish to unlock masteries.
 
     """
     duffelbag_user = await auth.get_user_by_platform(
         platform=auth.Platform.DISCORD,
-        platform_id=inter.author.id,
+        platform_id=ctx.author.id,
         strict=True,
     )
     arknights_user = await auth.get_active_arknights_account(duffelbag_user)
@@ -80,26 +71,25 @@ async def farm_add_goal_skill(
         level=1,
     )
 
-    wrapped = components.wrap_interaction(inter)
-    await wrapped.response.send_message(
+    skill_select_menu = SkillSelect.for_character(character, skill_localisations, initial=initial)
+    await ctx.create_initial_response(
         embed=display_skill(character, skill_level, skill_localisations[initial]),
-        components=SkillSelect.for_character(character, skill_localisations, initial=initial),
+        component=await ryoshu.into_action_row(skill_select_menu),
         ephemeral=True,
     )
 
 
-THUMB_FMT = (
-    "https://gamepress.gg/arknights/sites/arknights/files/game-images/skills/skill_icon_{}.png"
-)
+THUMB_FMT = "https://gamepress.gg/arknights/sites/arknights/files/game-images/skills/skill_icon_{}.png"
 
 
 def display_skill(
     character: user_data.HybridCharacter,
     skill_level: user_data.HybridSkillLevel,
     skill_localisation: database.StaticSkillLocalisation,
-) -> disnake.Embed:
+) -> hikari.Embed:
+    """Display information about a skill in an embed."""
     duration = "-" if skill_level.duration == -1 else skill_level.duration
-    return disnake.Embed(
+    return hikari.Embed(
         title=f"**{character.name}**",
         description=(
             f"### Skill {skill_level.skill_num}\u2002•\u2002"
@@ -114,8 +104,8 @@ def display_skill(
     ).set_thumbnail(THUMB_FMT.format(skill_level.skill_id))
 
 
-@manager.register
-class SkillSelect(components.RichStringSelect):
+@manager.register()
+class SkillSelect(ryoshu.ManagedTextSelectMenu):
     """Select menu that allows a user to select the skill they wish to farm for.
 
     An instance of this select is meant for one character.
@@ -134,11 +124,12 @@ class SkillSelect(components.RichStringSelect):
         *,
         initial: int = 0,
     ) -> "SkillSelect":
+        """Make a SkillSelect for a given Arknights character."""
         options = [
-            disnake.SelectOption(
+            hikari.impl.SelectOptionBuilder(
                 label=skill.name,
                 value=skill.skill_id,
-                default=(i == initial),
+                is_default=(i == initial),
             )
             for i, skill in enumerate(skills)
         ]
@@ -149,22 +140,19 @@ class SkillSelect(components.RichStringSelect):
             user_character_id=character.user_character_id,
         )
 
-    async def callback(self, inter: components.MessageInteraction) -> None:
+    async def callback(self, event: hikari.InteractionCreateEvent) -> None:  # noqa: D102
         ...
 
 
-setup, teardown = plugin.create_extension_handlers()
-
-
-async def character_autocomplete_template(
-    _inter: disnake.CommandInteraction,
+async def character_autocomplete_template(  # noqa: PLR0913
+    ctx: tanjun.abc.AutocompleteContext,
     input_: str,
     *,
     characters: dict[str, str],
     min_results: int,
     max_results: int,
     score_cutoff: float,
-) -> dict[str, str]:
+) -> None:
     """Template function for character autocompleters.
 
     Meant to be finalised using `functools.partial`, providing values for this
@@ -172,32 +160,34 @@ async def character_autocomplete_template(
     """
     if not input_:
         # Truncate to first 25 options...
-        return dict(pair for pair, _ in zip(characters.items(), range(25), strict=False))
+        options = dict(pair for pair, _ in zip(characters.items(), range(25), strict=False))
 
-    matches = rapidfuzz.process.extract(
-        input_,
-        characters.keys(),
-        processor=rapidfuzz.utils.default_process,
-        limit=max_results,
-    )
+    else:
+        matches = rapidfuzz.process.extract(
+            input_,
+            characters.keys(),
+            processor=rapidfuzz.utils.default_process,
+            limit=max_results,
+        )
 
-    options: dict[str, str] = {}
-    for i, (match, score, _) in enumerate(matches):
-        # Only return results that match "well enough". If there aren't enough
-        # results, return at least a given minimum.
-        if i >= min_results and score < score_cutoff:
-            break
+        options: dict[str, str] = {}
+        for i, (match, score, _) in enumerate(matches):
+            # Only return results that match "well enough". If there aren't enough
+            # results, return at least a given minimum.
+            if i >= min_results and score < score_cutoff:
+                break
 
-        options[match] = characters[match]
+            options[match] = characters[match]
 
-    return options
+    await ctx.set_choices(options)
 
 
-@plugin.load_hook()
+@component.with_client_callback(tanjun.ClientCallbackNames.STARTING)
 async def finalise_char_autocompleters() -> None:
     """Finalise the character autocomplete template with various settings for various commands."""
     characters = await database.StaticCharacter.objects()
 
+    # TODO: Maybe we can make this happen with DI somehow?
     min_mastery_rarity = 4  # 3* ops and below cannot have masteries.
     mastery_autocomplete = functools.partial(
         character_autocomplete_template,
@@ -211,4 +201,4 @@ async def finalise_char_autocompleters() -> None:
         score_cutoff=80,
     )
 
-    farm_add_goal_skill.autocomplete("character_name")(mastery_autocomplete)  # pyright: ignore
+    farm_add_goal_skill.set_str_autocomplete("character_name", mastery_autocomplete)

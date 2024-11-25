@@ -6,9 +6,9 @@ import re
 import typing
 
 import arkprts
-import disnake
-from disnake.ext import commands, components, plugins
-from disnake.ext.components import interaction as interaction_
+import hikari
+import ryoshu
+import tanjun
 
 import database
 from duffelbag import async_utils, auth, exceptions, log, shared
@@ -20,109 +20,99 @@ _EMAIL_REGEX: typing.Final[typing.Pattern[str]] = re.compile(
     r"^(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|\"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*\")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9]))\.){3}(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9])|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])$",
 )
 
-# TODO: Expose a type like this in ext-components somewhere
-_MessageComponents = interaction_.Components[interaction_.MessageComponents]
 
-plugin = plugins.Plugin()
-manager = components.get_manager("duffelbag.auth")
-root_manager = components.get_manager()
+component = tanjun.Component(name=__name__)
+manager = ryoshu.get_manager("duffelbag.auth")
+root_manager = ryoshu.get_manager()
 
 
 # Account manipulation commands.
 
 
-@plugin.slash_command(name="account")
-async def account_(_: disnake.CommandInteraction) -> None:
-    """Do stuff with accounts."""
+account_group = component.with_slash_command(tanjun.slash_command_group("account", "Do stuff with accounts."))
+account_duffelbag_group = account_group.make_sub_group("duffelbag", "Do stuff with Duffelbag accounts.")
+account_discord_group = account_group.make_sub_group("discord", "Do stuff with Discord accounts.")
 
 
-@account_.sub_command_group(name="duffelbag")  # pyright: ignore
-async def account_duffelbag(_: disnake.CommandInteraction) -> None:
-    """Do stuff with Duffelbag accounts."""
-
-
-_USER_PARAM = commands.Param(
-    min_length=auth.MIN_USER_LEN,
-    max_length=auth.MAX_USER_LEN,
-    description=(
-        f"The username to use. Must be between {auth.MIN_USER_LEN} and"
-        f" {auth.MAX_USER_LEN} characters long."
-    ),
+_USER_DESC = (
+    f"The username to use. Must be between {auth.MIN_USER_LEN} and"
+    f" {auth.MAX_USER_LEN} characters long."
+)
+_PASS_DESC = (
+    f"The password to use. Must be between {auth.MIN_PASS_LEN} and"
+    f" {auth.MAX_PASS_LEN} characters long."
 )
 
 
-_PASS_PARAM = commands.Param(
-    min_length=auth.MIN_PASS_LEN,
-    max_length=auth.MAX_PASS_LEN,
-    description=(
-        f"The password to use. Must be between {auth.MIN_PASS_LEN} and"
-        f" {auth.MAX_PASS_LEN} characters long."
-    ),
-)
-
-
-@account_duffelbag.sub_command(name="create")  # pyright: ignore
+@component.with_slash_command
+@tanjun.with_str_slash_option("password", _PASS_DESC, min_length=auth.MIN_PASS_LEN, max_length=auth.MAX_PASS_LEN)
+@tanjun.with_str_slash_option("username", _USER_DESC, min_length=auth.MIN_USER_LEN, max_length=auth.MAX_USER_LEN)
+@account_duffelbag_group.as_sub_command("create", "Create a new Duffelbag account and bind your discord account to it.")
 async def account_duffelbag_create(
-    inter: disnake.CommandInteraction,
-    username: str = _USER_PARAM,
-    password: str = _PASS_PARAM,
+    ctx: tanjun.abc.SlashContext,
+    username: str,
+    password: str,
 ) -> None:
     """Create a new Duffelbag account and bind your discord account to it."""
     await auth.create_user(
         username=username,
         password=password,
         platform=auth.Platform.DISCORD,
-        platform_id=inter.author.id,
+        platform_id=ctx.author.id,
     )
 
-    wrapped = components.wrap_interaction(inter)
-
-    await wrapped.response.send_message(
+    await ctx.create_initial_response(
         localisation.localise(
             "auth_new_collapsed",
-            inter.locale,
+            ctx.interaction.locale,
             format_map={"username": username},
         ),
-        components=root_manager.make_button(
-            "ExpBtn",
-            key_base="auth_new",
-            params=[username, auth.Platform.DISCORD.value],
+        component=await ryoshu.into_action_row(
+            root_manager.make_button(
+                "ExpBtn",
+                key_base="auth_new",
+                params=[username, auth.Platform.DISCORD.value],
+            ),
         ),
-        ephemeral=True,
+        flags=hikari.MessageFlag.EPHEMERAL,
     )
 
 
-@account_duffelbag.sub_command(name="recover")  # pyright: ignore
+@component.with_slash_command
+@tanjun.with_str_slash_option("password", _PASS_DESC, min_length=auth.MIN_PASS_LEN, max_length=auth.MAX_PASS_LEN)
+@account_duffelbag_group.as_sub_command("recover", "Recover the Duffelbag account connected to your discord account by setting a new password.")
 async def account_duffelbag_recover(
-    inter: disnake.CommandInteraction,
-    password: str = _PASS_PARAM,
+    ctx: tanjun.abc.SlashContext,
+    password: str,
 ) -> None:
     """Recover the Duffelbag account connected to your discord account by setting a new password."""
     duffelbag_user = await auth.recover_user(
         platform=auth.Platform.DISCORD,
-        platform_id=inter.author.id,
+        platform_id=ctx.author.id,
         password=password,
     )
 
-    await inter.response.send_message(
+    await ctx.create_initial_response(
         localisation.localise(
             "auth_recover",
-            inter.locale,
+            ctx.interaction.locale,
             format_map={"username": duffelbag_user.username, "password": password},
         ),
         ephemeral=True,
     )
 
 
-@account_duffelbag.sub_command(name="delete")  # pyright: ignore
+@component.with_slash_command
+@tanjun.with_str_slash_option("password", _PASS_DESC, min_length=auth.MIN_PASS_LEN, max_length=auth.MAX_PASS_LEN)
+@account_duffelbag_group.as_sub_command("delete", "Delete your duffelbag account. This has a 24 hour grace period.")
 async def account_duffelbag_delete(
-    inter: disnake.CommandInteraction,
-    password: str = _PASS_PARAM,
+    ctx: tanjun.abc.SlashContext,
+    password: str,
 ) -> None:
     """Delete your duffelbag account. This has a 24 hour grace period."""
     duffelbag_user = await auth.get_user_by_platform(
         platform=auth.Platform.DISCORD,
-        platform_id=inter.author.id,
+        platform_id=ctx.author.id,
         strict=True,
     )
 
@@ -131,10 +121,10 @@ async def account_duffelbag_delete(
     scheduled_deletion = await auth.schedule_user_deletion(duffelbag_user)
     schedule_user_deletion(scheduled_deletion)
 
-    await inter.response.send_message(
+    await ctx.create_initial_response(
         localisation.localise(
             "auth_delete_schedule",
-            inter.locale,
+            ctx.interaction.locale,
             format_map={
                 "timestamp": disnake.utils.format_dt(scheduled_deletion.deletion_ts, style="R"),
             },
@@ -143,16 +133,14 @@ async def account_duffelbag_delete(
     )
 
 
-@account_.sub_command_group(name="discord")  # pyright: ignore
-async def account_discord(_: disnake.CommandInteraction) -> None:
-    """Do stuff with a Discord account."""
-
-
-@account_discord.sub_command(name="bind")  # pyright: ignore
+@component.with_slash_command
+@tanjun.with_str_slash_option("password", _PASS_DESC, min_length=auth.MIN_PASS_LEN, max_length=auth.MAX_PASS_LEN)
+@tanjun.with_str_slash_option("username", _USER_DESC, min_length=auth.MIN_USER_LEN, max_length=auth.MAX_USER_LEN)
+@account_discord_group.as_sub_command("bind", "Bind your Discord account to an existing Duffelbag account.")
 async def account_discord_bind(
-    inter: disnake.CommandInteraction,
-    username: str = _USER_PARAM,
-    password: str = _PASS_PARAM,
+    ctx: tanjun.abc.SlashContext,
+    username: str,
+    password: str,
 ) -> None:
     """Bind your Discord account to an existing Duffelbag account."""
     duffelbag_user = await auth.login_user(username=username, password=password)
@@ -160,13 +148,13 @@ async def account_discord_bind(
     await auth.add_platform_account(
         duffelbag_user,
         platform=auth.Platform.DISCORD,
-        platform_id=inter.author.id,
+        platform_id=ctx.author.id,
     )
 
-    await inter.response.send_message(
+    await ctx.create_initial_response(
         localisation.localise(
             "auth_bind_platform",
-            locale=inter.locale,
+            locale=ctx.interaction.locale,
             format_map={
                 "platform": auth.Platform.DISCORD.value,
                 "username": username,

@@ -94,10 +94,11 @@ async def _eval_py(code: str, env: dict[str, object]) -> str:
 
 
 @component.with_listener()
-async def eval_listener(event: hikari.MessageCreateEvent) -> None:
+async def eval_listener(
+    event: hikari.MessageCreateEvent,
+    bot: hikari.GatewayBot = tanjun.inject(type=hikari.GatewayBot),
+) -> None:
     """Evaluate codeblock(s) in a message."""
-    assert component.client
-
     message = event.message
     if not message.content:
         return
@@ -105,14 +106,19 @@ async def eval_listener(event: hikari.MessageCreateEvent) -> None:
     if message.author.id not in _valid_ids:
         return
 
+    bot_user = bot.get_me()
+    assert bot_user
+
     content = message.content.strip()
-    if not content.startswith("<@1064181759278858280> eval"):  # TODO: Make mention dynamically
+    if not content.startswith(f"{bot_user.mention} eval"):  # TODO: Make mention dynamically
         return
 
     code, lang = _clean_code(message.content)
     if lang in ("py", "python"):
         env: dict[str, object] = {
-            "bot": component.client,
+            "bot": bot,
+            "rest": bot.rest,
+            "cache": bot.cache,
             "author": message.author,
             "message": message,
             "asyncio": asyncio,
@@ -128,10 +134,9 @@ async def eval_listener(event: hikari.MessageCreateEvent) -> None:
             "guild": None,
         }
 
-        if component.client.cache:
-            env["channel"] = component.client.cache.get_guild_channel(message.channel_id)
-            if message.guild_id:
-                env["guild"] = component.client.cache.get_guild(message.guild_id)
+        env["channel"] = bot.cache.get_guild_channel(message.channel_id)
+        if message.guild_id:
+            env["guild"] = bot.cache.get_guild(message.guild_id)
 
 
         out = await _eval_py(code, env)

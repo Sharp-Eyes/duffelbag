@@ -61,9 +61,13 @@ async def _main() -> None:
         client = (
             tanjun.Client.from_gateway_bot(duffelbag, declare_global_commands=True)
             .set_type_dependency(aiohttp.ClientSession, session)
+            .set_type_dependency(hikari.GatewayBot, duffelbag)
             .add_client_callback(tanjun.ClientCallbackNames.COMPONENT_ADDED, localisation.repopulate_command_mentions)
             .add_client_callback(tanjun.ClientCallbackNames.COMPONENT_REMOVED, localisation.repopulate_command_mentions)
-            .load_modules("duffelbag.discord.exts.auth")
+            .load_modules(
+                "duffelbag.discord.exts.auth",
+                "duffelbag.discord.exts.eval",
+            )
         )
 
         await duffelbag.start()

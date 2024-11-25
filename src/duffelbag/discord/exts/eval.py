@@ -18,15 +18,16 @@ import traceback
 import types
 import typing
 
-import disnake
-from disnake.ext import commands, components, plugins
+import hikari
+import ryoshu
+import tanjun
 
 import database
 from duffelbag.discord import config
 
 _valid_ids: set[int] = set()
 
-plugin = plugins.Plugin()
+component = tanjun.Component(name="eval")
 
 
 # Credit to Monty-Python eval
@@ -92,34 +93,46 @@ async def _eval_py(code: str, env: dict[str, object]) -> str:
         return sio.getvalue().strip()
 
 
-@plugin.listener("on_message")
-async def eval_listener(message: disnake.Message) -> None:
+@component.with_listener()
+async def eval_listener(event: hikari.MessageCreateEvent) -> None:
     """Evaluate codeblock(s) in a message."""
+    assert component.client
+
+    message = event.message
+    if not message.content:
+        return
+
     if message.author.id not in _valid_ids:
         return
 
     content = message.content.strip()
-    if not content.startswith(f"{plugin.bot.user.mention} eval"):
+    if not content.startswith("<@1064181759278858280> eval"):  # TODO: Make mention dynamically
         return
 
     code, lang = _clean_code(message.content)
     if lang in ("py", "python"):
         env: dict[str, object] = {
-            "bot": plugin.bot,
-            "channel": message.channel,
+            "bot": component.client,
             "author": message.author,
-            "guild": message.guild,
             "message": message,
             "asyncio": asyncio,
             "io": io,
             "os": os,
             "sys": sys,
             "typing": typing,
-            "disnake": disnake,
-            "commands": commands,
-            "components": components,
+            "hikari": hikari,
+            "tanjun": tanjun,
+            "ryoshu": ryoshu,
             "database": database,
+            "channel": None,
+            "guild": None,
         }
+
+        if component.client.cache:
+            env["channel"] = component.client.cache.get_guild_channel(message.channel_id)
+            if message.guild_id:
+                env["guild"] = component.client.cache.get_guild(message.guild_id)
+
 
         out = await _eval_py(code, env)
 
@@ -127,15 +140,16 @@ async def eval_listener(message: disnake.Message) -> None:
         msg = "Postgres soontm"
         raise NotImplementedError(msg)
 
-    await message.channel.send(f"```\n{out}\n```")
+    await message.respond(f"```\n{out}\n```")
 
 
-@plugin.load_hook()
+@component.with_client_callback(tanjun.ClientCallbackNames.STARTED)
 async def populate_eval_users() -> None:
     """Populate set of users that are allowed to use eval."""
-    owner_ids = {plugin.bot.owner_id} if plugin.bot.owner_id else plugin.bot.owner_ids
+    # owner_ids = {component.client.} if plugin.bot.owner_id else plugin.bot.owner_ids
+    owner_ids = set()
 
     _valid_ids.update(config.BOT_CONFIG.SUPERUSER_IDS, owner_ids)
 
 
-setup, teardown = plugin.create_extension_handlers()
+loader = component.make_loader()

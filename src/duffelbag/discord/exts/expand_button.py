@@ -2,30 +2,38 @@
 
 import typing
 
-import disnake
-from disnake.ext import components, plugins
+import hikari
+import ryoshu
+import tanjun
 
 from duffelbag import log
 from duffelbag.discord import localisation
 
 _LOGGER = log.get_logger(__name__)
 
-_EXPAND: typing.Final[tuple[str, str, str]] = (
+
+class _ExpandButtonParams(typing.NamedTuple):
+    label: str
+    emoji: str
+    key_suffix: str
+
+
+_EXPAND: typing.Final = _ExpandButtonParams(
     "Expand...",
     "<:expand:1113954208014684252>",
     "_collapsed",
 )
-_COLLAPSE: typing.Final[tuple[str, str, str]] = (
+_COLLAPSE: typing.Final = _ExpandButtonParams(
     "Collapse...",
     "<:collapse:1113954205766537226>",
     "_expanded",
 )
 
-plugin = plugins.Plugin()
+component = tanjun.Component(name="expand_button")
 
 # NOTE: This manager has ownership/permissions checks, see
 #       'duffelbag.discord.components.restricted_manager'
-manager = components.get_manager("duffelbag.restricted")
+manager = ryoshu.get_manager("duffelbag.restricted")
 
 
 class _PosToFormatMap(dict[str, object]):
@@ -34,7 +42,7 @@ class _PosToFormatMap(dict[str, object]):
     #       we don't need to store localisation string format keys in the
     #       custom id, and can instead provide the parameters positionally.
 
-    def __init__(self, *args: object, strict: bool = True) -> None:
+    def __init__(self, args: typing.Iterable[object], *, strict: bool) -> None:
         self._arg_iter = iter(args)
         self.strict = strict
 
@@ -47,12 +55,12 @@ class _PosToFormatMap(dict[str, object]):
 
 
 @manager.register(identifier="ExpBtn")
-class ExpandButton(components.RichButton):
+class ExpandButton(ryoshu.ManagedButton):
     """A button that toggles a message between expanded and collapsed state."""
 
     # Start collapsed, so show expand label and emoji.
-    label: str | None = _EXPAND[0]
-    emoji: str | disnake.Emoji | disnake.PartialEmoji | None = _EXPAND[1]
+    label: str | None = _EXPAND.label
+    emoji: hikari.Snowflakeish | hikari.Emoji | str | None = _EXPAND[1]
 
     # Custom id params:
     key_base: str
@@ -60,28 +68,34 @@ class ExpandButton(components.RichButton):
     collapsed: bool = True
 
     def _format(self, string: str) -> str:
-        return string.format_map(_PosToFormatMap(*self.params))
+        return string.format_map(_PosToFormatMap(self.params, strict=True))
 
-    async def callback(self, inter: components.MessageInteraction) -> None:
+    async def callback(self, event: hikari.InteractionCreateEvent) -> None:
         """Toggle between expanded/collapsed."""
+        interaction = event.interaction
+        assert isinstance(interaction, hikari.ComponentInteraction)
+
         self.collapsed ^= True
         _LOGGER.trace(
             "Toggling expand button state for user %r to %r.",
-            inter.author.name,
+            interaction.user.display_name,
             "collapsed" if self.collapsed else "expanded",
         )
 
-        self.label, self.emoji, key_ext = _EXPAND if self.collapsed else _COLLAPSE
+        self.label, self.emoji, key_suffix = _EXPAND if self.collapsed else _COLLAPSE
 
         # NOTE: strict=False is required here as we need to format with
         #       self.params after localisation formatting is done. Since we
         #       call str.format_map on the result again later anyways, there's
         #       no risk of unformatted keys appearing in the output, either.
-        message = localisation.localise(self.key_base + key_ext, inter.locale, strict=False)
+        message = localisation.localise(self.key_base + key_suffix, interaction.locale, strict=False)
 
-        message_components, _ = await manager.parse_message_components(inter.message)
-        # TODO: Don't just consume existing components.
-        await inter.response.edit_message(self._format(message), components=message_components)
+        message_components, _ = await manager.parse_message_components(interaction.message)
+        await interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_UPDATE,
+            content=self._format(message),
+            components=await ryoshu.into_action_rows(message_components),
+        )
 
 
-setup, teardown = plugin.create_extension_handlers()
+loader = component.make_loader()

@@ -52,7 +52,7 @@ async def _main() -> None:
     root_manager = ryoshu.get_manager()
     root_manager.add_to_bot(duffelbag)
 
-    log.initialise()
+    log.initialise(log.DEBUG)
     manager.initialise()
 
     async with _make_client_session() as session:
@@ -67,6 +67,7 @@ async def _main() -> None:
             .load_modules(
                 "duffelbag.discord.exts.auth",
                 "duffelbag.discord.exts.eval",
+                "duffelbag.discord.exts.expand_button",
             )
         )
 

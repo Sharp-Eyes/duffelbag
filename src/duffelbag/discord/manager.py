@@ -109,9 +109,9 @@ async def component_perms(
     if guild:  # Ensure we're in a guild.
         channel = interaction.get_channel()
         assert channel
-        assert isinstance(interaction.user, hikari.Member)
+        assert interaction.member
 
-        permissions = tanjun.permissions.calculate_permissions(interaction.user, guild, guild.get_roles())
+        permissions = tanjun.permissions.calculate_permissions(interaction.member, guild, guild.get_roles())
 
         if not (
             source_interaction.user != interaction

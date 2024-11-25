@@ -14,18 +14,18 @@ _LOGGER = log.get_logger(__name__)
 
 class _ExpandButtonParams(typing.NamedTuple):
     label: str
-    emoji: str
+    emoji: hikari.Emoji
     key_suffix: str
 
 
 _EXPAND: typing.Final = _ExpandButtonParams(
     "Expand...",
-    "<:expand:1113954208014684252>",
+    hikari.CustomEmoji.parse("<:expand:1113954208014684252>"),
     "_collapsed",
 )
 _COLLAPSE: typing.Final = _ExpandButtonParams(
     "Collapse...",
-    "<:collapse:1113954205766537226>",
+    hikari.CustomEmoji.parse("<:collapse:1113954205766537226>"),
     "_expanded",
 )
 

@@ -41,7 +41,7 @@ arkprts = { git = "https://github.com/thesadru/arkprts" }
 hikari-ryoshu = { git = "https://github.com/sharp-eyes/hikari-ryoshu", branch = "refactor/parser" }
 
 [tool.pyright]
-pythonVersion = "3.11"
+pythonVersion = "3.12"
 exclude = [
     "**/node_modules",
     "**/__pycache__",
@@ -52,7 +52,7 @@ exclude = [
 reportMissingTypeStubs=false
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 120
 extend-exclude = [
     "database/piccolo_migrations",

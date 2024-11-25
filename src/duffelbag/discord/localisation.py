@@ -13,6 +13,17 @@ _LOGGER = log.get_logger(__name__)
 _COMMAND_MENTION_LOCALISATIONS: dict[str, dict[str, str]] = {}
 
 
+def _walk_nested_command_qualname(command: tanjun.abc.BaseSlashCommand) -> typing.Generator[str, None, None]:
+    children = getattr(command, "commands", None)
+    if not children:
+        yield command.name
+
+    else:
+        for child in children:
+            for child_name in _walk_nested_command_qualname(child):
+                yield f"{command.name} {child_name}"
+
+
 async def repopulate_command_mentions(source: tanjun.abc.Client | tanjun.Component) -> None:
     """Repopulate the internal cache for slash command mentions."""
     _LOGGER.trace("(Re)populating slash command mentions...")
@@ -29,18 +40,13 @@ async def repopulate_command_mentions(source: tanjun.abc.Client | tanjun.Compone
 
         for component in client.components:
             for command in component.slash_commands:
+                for name in _walk_nested_command_qualname(command):
+                    key = f"cmd${name.replace(" ", "_")}"
 
-                parent = command
-                while parent.parent:
-                    parent = parent.parent
+                    # NOTE: For now, we leave mentions unlocalised.
+                    value = f"</{name}:{command.tracked_command_id}>"
 
-                # for child in _walk_top_level_slash(slash):
-                key = f"cmd${command.name.replace(' ', '_')}"
-
-                # NOTE: For now, we leave mentions unlocalised.
-                value = f"</{command.name}:{parent.tracked_command_id}>"
-
-                _COMMAND_MENTION_LOCALISATIONS[locale][key] = value
+                    _COMMAND_MENTION_LOCALISATIONS[locale][key] = value
 
     _LOGGER.warning(_COMMAND_MENTION_LOCALISATIONS)
 

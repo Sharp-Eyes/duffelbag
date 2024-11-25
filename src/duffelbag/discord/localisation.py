@@ -2,8 +2,7 @@
 
 import typing
 
-import disnake
-from disnake.ext import commands
+import tanjun
 
 from duffelbag import localisation as base_localisation
 from duffelbag import log
@@ -13,18 +12,7 @@ _LOGGER = log.get_logger(__name__)
 _COMMAND_MENTION_LOCALISATIONS: dict[str, dict[str, str]] = {}
 
 
-def _walk_top_level_slash(
-    command: commands.InvokableSlashCommand,
-) -> typing.Generator[commands.InvokableSlashCommand | commands.SubCommand, None, None]:
-    children = getattr(command, "children", None)
-    if not children:
-        yield command
-    else:
-        for child in children.values():
-            yield from _walk_top_level_slash(child)
-
-
-async def repopulate_command_mentions(bot: commands.InteractionBot) -> None:
+async def repopulate_command_mentions(client: tanjun.Client) -> None:
     """Repopulate the internal cache for slash command mentions."""
     _LOGGER.trace("(Re)populating slash command mentions...")
     _COMMAND_MENTION_LOCALISATIONS.clear()
@@ -32,21 +20,18 @@ async def repopulate_command_mentions(bot: commands.InteractionBot) -> None:
     for locale in base_localisation.LOCALISATION_DATA:
         _COMMAND_MENTION_LOCALISATIONS[locale] = {}
 
-        for command in bot.global_application_commands:
-            if not isinstance(command, disnake.APISlashCommand):
-                continue
+        for component in client.components:
+            for command in component.slash_commands:
 
-            slash = bot.get_slash_command(command.name)
-            if not slash:
-                continue
+                parent = command
+                while parent.parent:
+                    parent = parent.parent
 
-            assert isinstance(slash, commands.InvokableSlashCommand)
-
-            for child in _walk_top_level_slash(slash):
-                key = f"cmd${child.qualified_name.replace(' ', '_')}"
+                # for child in _walk_top_level_slash(slash):
+                key = f"cmd${command.name.replace(' ', '_')}"
 
                 # NOTE: For now, we leave mentions unlocalised.
-                value = f"</{child.qualified_name}:{command.id}>"
+                value = f"</{command.name}:{parent.tracked_command_id}>"
 
                 _COMMAND_MENTION_LOCALISATIONS[locale][key] = value
 
@@ -55,7 +40,7 @@ async def repopulate_command_mentions(bot: commands.InteractionBot) -> None:
 
 def localise(
     key: str,
-    locale: disnake.Locale | str,
+    locale: str,
     *,
     strict: bool = True,
     format_map: dict[str, object] | None = None,
@@ -79,6 +64,7 @@ def localise(
     -------
     str
         The localised and formatted string.
+
     """
     _LOGGER.trace("Localising key %r.", key)
 
@@ -89,29 +75,16 @@ def localise(
     if format_map is None:
         format_map = {}
 
-    resolved_locale: str = locale.name if isinstance(locale, disnake.Locale) else locale
-    format_map |= _COMMAND_MENTION_LOCALISATIONS[resolved_locale]
+    format_map |= _COMMAND_MENTION_LOCALISATIONS[locale]
 
-    _LOGGER.trace("Target locale: %r.", resolved_locale)
+    _LOGGER.trace("Target locale: %r.", locale)
     _LOGGER.debug(
         "Localisation type: %r, Localisation parameters: %r.",
         "strict" if strict else "lenient",
         format_map,
     )
 
-    return base_localisation.localise(
-        key,
-        resolved_locale,
-        strict=strict,
-        format_map=format_map,
-    )
-
-
-def initialise(bot: commands.InteractionBot) -> None:
-    """Initialise slash command mentions."""
-    bot.add_listener(repopulate_command_mentions, "on_command_sync")
-
-    _LOGGER.trace("Succesfully initialised localisations.")
+    return base_localisation.localise(key, locale, strict=strict, format_map=format_map)
 
 
 format_timestamp: typing.Final = base_localisation.format_timestamp

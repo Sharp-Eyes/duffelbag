@@ -55,6 +55,7 @@ def localise(
     -------
     str
         The localised and formatted string.
+
     """
     if locale not in LOCALISATION_DATA or key not in LOCALISATION_DATA[locale]:
         string = LOCALISATION_DATA[DEFAULT_LOCALE][key]
@@ -72,4 +73,5 @@ update_localisation_data()
 
 
 def format_timestamp(datetime: datetime_.datetime, /, style: str) -> str:
+    """Format a timestamp with discord markdown."""
     return f"<t:{datetime.timestamp():.0f}:{style}>"

@@ -10,7 +10,7 @@ import tanjun
 import uvloop
 
 from duffelbag import log, shared
-from duffelbag.discord import config, manager
+from duffelbag.discord import config, localisation, manager
 
 # Extensions.
 
@@ -53,18 +53,16 @@ async def _main() -> None:
     root_manager.add_to_bot(duffelbag)
 
     log.initialise()
-    # localisation.initialise(duffelbag)
     manager.initialise()
-
-    # for ext in _discover_exts():
-    #     duffelbag.load_extension(ext)
 
     async with _make_client_session() as session:
         _make_guest_client(session)
 
-        client = (
-            tanjun.Client.from_gateway_bot(duffelbag)
+        _client = (
+            tanjun.Client.from_gateway_bot(duffelbag, declare_global_commands=True)
             .set_type_dependency(aiohttp.ClientSession, session)
+            .add_client_callback(tanjun.ClientCallbackNames.COMPONENT_ADDED, localisation.repopulate_command_mentions)
+            .add_client_callback(tanjun.ClientCallbackNames.COMPONENT_REMOVED, localisation.repopulate_command_mentions)
         )
 
         await duffelbag.start()

@@ -112,3 +112,6 @@ def initialise(bot: commands.InteractionBot) -> None:
     bot.add_listener(repopulate_command_mentions, "on_command_sync")
 
     _LOGGER.trace("Succesfully initialised localisations.")
+
+
+format_timestamp: typing.Final = base_localisation.format_timestamp

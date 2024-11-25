@@ -409,7 +409,13 @@ dependencies = [
     { name = "rapidfuzz" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
+dev = [
+    { name = "pre-commit" },
+    { name = "pyright" },
+    { name = "ruff" },
+    { name = "slotscheck" },
+]
 discord = [
     { name = "hikari" },
     { name = "hikari-ryoshu" },
@@ -420,27 +426,14 @@ speedups = [
     { name = "uvloop" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "pre-commit" },
-    { name = "pyright" },
-    { name = "ruff" },
-    { name = "slotscheck" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "argon2-cffi", specifier = ">=23.1.0" },
     { name = "arkprts", git = "https://github.com/thesadru/arkprts" },
     { name = "coloredlogs", specifier = ">=15.0.1" },
-    { name = "hikari", marker = "extra == 'discord'", specifier = ">=2.1.0" },
-    { name = "hikari-ryoshu", marker = "extra == 'discord'", git = "https://github.com/sharp-eyes/hikari-ryoshu" },
-    { name = "hikari-tanjun", marker = "extra == 'discord'", specifier = ">=2.17.6" },
-    { name = "orjson", marker = "extra == 'speedups'", specifier = ">=3.10.12" },
     { name = "piccolo", extras = ["postgres"], specifier = ">=1.22.0" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "rapidfuzz", specifier = ">=3.10.1" },
-    { name = "uvloop", marker = "extra == 'speedups'", specifier = ">=0.21.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -449,6 +442,15 @@ dev = [
     { name = "pyright", specifier = ">=1.1.389" },
     { name = "ruff", specifier = ">=0.8.0" },
     { name = "slotscheck", specifier = ">=0.19.1" },
+]
+discord = [
+    { name = "hikari", specifier = ">=2.1.0" },
+    { name = "hikari-ryoshu", git = "https://github.com/sharp-eyes/hikari-ryoshu" },
+    { name = "hikari-tanjun", specifier = ">=2.17.6" },
+]
+speedups = [
+    { name = "orjson", specifier = ">=3.10.12" },
+    { name = "uvloop", specifier = ">=0.21.0" },
 ]
 
 [[package]]

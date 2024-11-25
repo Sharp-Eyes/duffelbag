@@ -1,11 +1,12 @@
 """Module containing helpers for platform-agnostic localisation."""
 
+import datetime as datetime_
 import pathlib
 import typing
 
 import orjson
 
-__all__: typing.Sequence[str] = ("LOCALISATION_DATA", "update_localisation_data", "localise")
+__all__: typing.Sequence[str] = ("LOCALISATION_DATA", "format_timestamp", "localise", "update_localisation_data")
 
 DEFAULT_LOCALE: typing.Final[str] = "en_GB"
 LOCALISATION_DIR: typing.Final[pathlib.Path] = pathlib.Path.cwd() / "localisation"
@@ -68,3 +69,7 @@ def localise(
 
 
 update_localisation_data()
+
+
+def format_timestamp(datetime: datetime_.datetime, /, style: str) -> str:
+    return f"<t:{datetime.timestamp():.0f}:{style}>"

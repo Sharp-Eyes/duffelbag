@@ -7,6 +7,8 @@ import typing
 
 import arkprts
 import hikari
+import hikari.errors
+import hikari.interactions.modal_interactions
 import ryoshu
 import tanjun
 
@@ -32,6 +34,7 @@ root_manager = ryoshu.get_manager()
 account_group = component.with_slash_command(tanjun.slash_command_group("account", "Do stuff with accounts."))
 account_duffelbag_group = account_group.make_sub_group("duffelbag", "Do stuff with Duffelbag accounts.")
 account_discord_group = account_group.make_sub_group("discord", "Do stuff with Discord accounts.")
+account_arknights_group = account_group.make_sub_group("arknights", "Do stuff with Arknights accounts.")
 
 
 _USER_DESC = (
@@ -80,7 +83,10 @@ async def account_duffelbag_create(
 
 @component.with_slash_command
 @tanjun.with_str_slash_option("password", _PASS_DESC, min_length=auth.MIN_PASS_LEN, max_length=auth.MAX_PASS_LEN)
-@account_duffelbag_group.as_sub_command("recover", "Recover the Duffelbag account connected to your discord account by setting a new password.")
+@account_duffelbag_group.as_sub_command(
+    "recover",
+    "Recover the Duffelbag account connected to your discord account by setting a new password.",
+)
 async def account_duffelbag_recover(
     ctx: tanjun.abc.SlashContext,
     password: str,
@@ -126,7 +132,7 @@ async def account_duffelbag_delete(
             "auth_delete_schedule",
             ctx.interaction.locale,
             format_map={
-                "timestamp": disnake.utils.format_dt(scheduled_deletion.deletion_ts, style="R"),
+                "timestamp": localisation.format_timestamp(scheduled_deletion.deletion_ts, style="R"),
             },
         ),
         ephemeral=True,
@@ -163,20 +169,23 @@ async def account_discord_bind(
         ephemeral=True,
     )
 
-
-@account_.sub_command_group(name="arknights")  # pyright: ignore
-async def account_arknights(_: disnake.CommandInteraction) -> None:
-    """Do stuff with an Arknights account."""
-
-
-@account_arknights.sub_command(name="bind")  # pyright: ignore
+@component.with_slash_command
+@tanjun.with_str_slash_option(
+    "server",
+    "The server to which your Arknights account is registered.",
+    min_length=2,
+    max_length=4,
+    choices=["en", "jp", "kr", "cn", "bili", "tw"],
+)
+@tanjun.with_str_slash_option("email", "The email address bound to your Arknights account.")
+@account_arknights_group.as_sub_command("bind", "Bind an Arknights account to your Duffelbag account.")
 async def account_arknights_bind(
-    inter: disnake.CommandInteraction,
+    ctx: tanjun.abc.SlashContext,
     server: arkprts.ArknightsServer,
     email: str,
 ) -> None:
     """Bind an Arknights account to your Duffelbag account."""
-    await inter.response.defer(ephemeral=True)
+    await ctx.defer(ephemeral=True)
 
     if not _EMAIL_REGEX.fullmatch(email):
         msg = f"The provided email address {email!r} is not a valid email address."
@@ -185,50 +194,51 @@ async def account_arknights_bind(
     await auth.start_authentication(server=server, email=email)
 
     button = ArknightsBindButton(
-        label=localisation.localise("auth_bind_ak_title", locale=inter.locale),
+        label=localisation.localise("auth_bind_ak_title", locale=ctx.interaction.locale),
         server=server,
         email=email,
     )
 
-    wrapped = components.wrap_interaction(inter)
-    await wrapped.edit_original_message(
+    await ctx.edit_last_response(
         localisation.localise(
             "auth_bind_ak",
-            locale=inter.locale,
+            locale=ctx.interaction.locale,
             format_map={"email": email},
         ),
-        components=[button],
+        component=await ryoshu.into_action_row(button),
     )
 
 
-@account_arknights.sub_command(name="set-active")  # pyright: ignore
-async def account_arknights_set_active(inter: disnake.CommandInteraction) -> None:
+@component.with_slash_command
+@account_arknights_group.as_sub_command("set-active", "Set a different Arknights account as your active account.")
+async def account_arknights_set_active(ctx: tanjun.abc.SlashContext) -> None:
     """Set a different Arknights account as your active account."""
-    await inter.response.defer(ephemeral=True)
+    await ctx.defer(ephemeral=True)
 
     duffelbag_user = await auth.get_user_by_platform(
         platform=auth.Platform.DISCORD,
-        platform_id=inter.author.id,
+        platform_id=ctx.author.id,
         strict=True,
     )
     component = await ArknightsActiveAccountSelect.for_duffelbag_user(duffelbag_user)
 
-    wrapped = components.wrap_interaction(inter)
-    await wrapped.edit_original_response(
-        localisation.localise("auth_ak_set_active", inter.locale),
-        components=[component],
+    await ctx.edit_last_response(
+        localisation.localise("auth_ak_set_active", ctx.interaction.locale),
+        component=await ryoshu.into_action_row(component),
     )
 
 
-@account_arknights.sub_command(name="unbind")  # pyright: ignore
+@component.with_slash_command
+@tanjun.with_str_slash_option("password", _PASS_DESC, min_length=auth.MIN_PASS_LEN, max_length=auth.MAX_PASS_LEN)
+@account_arknights_group.as_sub_command("set-active", "Set a different Arknights account as your active account.")
 async def account_arknights_unbind(
-    inter: disnake.CommandInteraction,
-    password: str = _PASS_PARAM,
+    ctx: tanjun.abc.SlashContext,
+    password: str,
 ) -> None:
     """Unlink your Arknights account. This has a 24 hour grace period."""
     duffelbag_user = await auth.get_user_by_platform(
         platform=auth.Platform.DISCORD,
-        platform_id=inter.author.id,
+        platform_id=ctx.author.id,
         strict=True,
     )
 
@@ -236,10 +246,9 @@ async def account_arknights_unbind(
 
     component = await ArknightsRemoveAccountSelect.for_duffelbag_user(duffelbag_user)
 
-    wrapped = components.wrap_interaction(inter)
-    await wrapped.response.send_message(
-        localisation.localise("auth_ak_remove_msg", inter.locale),
-        components=[component],
+    await ctx.create_initial_response(
+        localisation.localise("auth_ak_remove_msg", ctx.interaction.locale),
+        component=await ryoshu.into_action_row(component),
         ephemeral=True,
     )
 
@@ -248,48 +257,65 @@ async def account_arknights_unbind(
 
 
 @manager.register(identifier="ArkBind")
-class ArknightsBindButton(components.RichButton):
+class ArknightsBindButton(ryoshu.ManagedButton):
     """Button to complete the Arknights account verification process."""
 
-    label: str
-    style: disnake.ButtonStyle = disnake.ButtonStyle.success
+    style: hikari.ButtonStyle | int = hikari.ButtonStyle.SUCCESS
 
-    server: arkprts.ArknightsServer = components.field(
-        parser=components.parser.StringParser,  # pyright: ignore  # TODO: implement literal parser
+    server: arkprts.ArknightsServer = ryoshu.field(
+        parser=ryoshu.parser.StringParser,  # pyright: ignore  # TODO: implement literal parser
     )
     email: str
 
-    async def callback(self, inter: components.MessageInteraction) -> None:
+    async def callback(self, event: hikari.InteractionCreateEvent) -> None:
         """Verify and link an Arknights account to a Duffelbag account."""
-        custom_id = f"arknights_verify|{inter.id}"
-        text_input = disnake.ui.TextInput(
-            label=localisation.localise("auth_bind_ak_modal_label", inter.locale),
-            custom_id="verification_code",
-            min_length=6,
-            max_length=6,
-            placeholder="XXXXXX",
+        assert isinstance(event.interaction, hikari.ComponentInteraction)
+
+        locale = event.interaction.locale
+        custom_id = f"arknights_verify|{event.interaction.id}"
+        action_row = (
+            hikari.impl.ModalActionRowBuilder()
+            .add_text_input(
+                "verification_code",
+                localisation.localise("auth_bind_ak_modal_label", locale),
+                min_length=6,
+                max_length=6,
+                placeholder="XXXXXX",
+            )
         )
-        await inter.response.send_modal(
-            title=self.label,
+        await event.interaction.create_modal_response(
+            title=self.label or "UNKNOWN",
             custom_id=custom_id,
-            components=[text_input],
+            component=action_row,
         )
 
+        assert isinstance(event.app, hikari.GatewayBot)  # TODO: DI bot into here?
         # NOTE: asyncio.TimeoutError is handled by the component manager.
-        modal_inter: disnake.ModalInteraction = await inter.bot.wait_for(
-            disnake.Event.modal_submit,
-            check=lambda modal_inter: modal_inter.custom_id == custom_id,
+        modal_event: hikari.InteractionCreateEvent = await event.app.wait_for(
+            hikari.InteractionCreateEvent,
+            predicate=lambda event: (
+                isinstance(event.interaction, hikari.ModalInteraction)
+                and event.interaction.custom_id == custom_id
+            ),
             timeout=5 * 60,
         )
 
-        await modal_inter.response.defer(ephemeral=True)
+        assert isinstance(modal_event.interaction, hikari.ModalInteraction)
+        await modal_event.interaction.create_initial_response(
+            response_type=hikari.ResponseType.DEFERRED_MESSAGE_CREATE,
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
 
-        verification_code = modal_inter.text_values[text_input.custom_id]
+        # There's only one row with one component, so we can select it as such.
+        component = modal_event.interaction.components[0][0]
+        assert isinstance(component, hikari.TextInputComponent)
+        verification_code = component.value
+
         if not verification_code.isdigit():
-            await modal_inter.edit_original_response(
+            await modal_event.interaction.edit_initial_response(
                 localisation.localise(
                     "auth_bind_ak_invalid_vcode",
-                    locale=inter.locale,
+                    locale=locale,
                     format_map={"code": verification_code},
                 ),
             )
@@ -297,7 +323,7 @@ class ArknightsBindButton(components.RichButton):
 
         duffelbag_user = await auth.get_user_by_platform(
             platform=auth.Platform.DISCORD,
-            platform_id=inter.author.id,
+            platform_id=event.interaction.user.id,
             strict=True,
         )
 
@@ -308,10 +334,10 @@ class ArknightsBindButton(components.RichButton):
             verification_code=verification_code,
         )
 
-        await modal_inter.edit_original_response(
+        await modal_event.interaction.edit_initial_response(
             localisation.localise(
                 "auth_bind_ak_success_active" if arknights_user.active else "auth_bind_ak_success",
-                locale=inter.locale,
+                locale=locale,
             ),
         )
 
@@ -320,13 +346,16 @@ class ArknightsBindButton(components.RichButton):
 class ArknightsActiveAccountSelect(component_base.ArknightsAccountSelect):
     """Select menu to set a user's active Arknights account."""
 
-    async def callback(self, inter: components.MessageInteraction) -> None:
+    async def callback(self, event: hikari.InteractionCreateEvent) -> None:
         """Select an Arknights account to mark as active."""
-        arknights_user = await self.get_selected_user(inter)
+        assert isinstance(event.interaction, hikari.ComponentInteraction)
+
+        arknights_user = await self.get_selected_user(event.interaction)
         await auth.set_active_arknights_account(arknights_user)
 
-        await inter.response.edit_message(
-            localisation.localise("auth_ak_set_active_success", inter.locale),
+        await event.interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_UPDATE,
+            content=localisation.localise("auth_ak_set_active_success", event.interaction.locale),
             components=None,
         )
 
@@ -335,12 +364,14 @@ class ArknightsActiveAccountSelect(component_base.ArknightsAccountSelect):
 class ArknightsRemoveAccountSelect(component_base.ArknightsAccountSelect):
     """Select menu to remove a user's Arknights account from the bot."""
 
-    async def callback(self, inter: components.MessageInteraction) -> None:
+    async def callback(self, event: hikari.InteractionCreateEvent) -> None:
         """Select an Arknights account to unlink."""
-        arknights_user = await self.get_selected_user(inter)
+        assert isinstance(event.interaction, hikari.ComponentInteraction)
+
+        arknights_user = await self.get_selected_user(event.interaction)
         duffelbag_user = await auth.get_user_by_platform(
             platform=auth.Platform.DISCORD,
-            platform_id=inter.author.id,
+            platform_id=event.interaction.user.id,
             strict=True,
         )
 
@@ -351,31 +382,35 @@ class ArknightsRemoveAccountSelect(component_base.ArknightsAccountSelect):
 
         schedule_user_deletion(scheduled_deletion)
 
-        await inter.response.edit_message(
-            localisation.localise(
+        await event.interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_UPDATE,
+            content=localisation.localise(
                 "auth_ak_remove_schedule",
-                locale=inter.locale,
+                locale=event.interaction.locale,
                 format_map={"timestamp": scheduled_deletion.deletion_ts},
             ),
             components=None,
         )
 
 
-@account_.error  # pyright: ignore
-async def account_error_handler(
-    inter: disnake.Interaction,
+hooks = tanjun.AnyHooks()
+component.set_slash_hooks(hooks)
+
+
+@hooks.with_on_error
+async def account_error_handler(  # noqa: C901
+    ctx: tanjun.abc.SlashContext,
     exception: Exception,
 ) -> typing.Literal[True]:
     """Handle any kind of authentication exception."""
-    exception = getattr(exception, "original", exception)
     _LOGGER.trace(
         "Handling auth exception of type %r for user %r.",
         type(exception).__name__,
-        inter.author.id,
+        ctx.author.id,
     )
 
     params: dict[str, object] = {}
-    msg_components: _MessageComponents = []
+    msg_components: list[ryoshu.api.ManagedComponent] = []
 
     match exception:
         case exceptions.CredentialSizeViolationError():
@@ -413,22 +448,21 @@ async def account_error_handler(
 
         case exceptions.DuffelbagDeletionAlreadyQueuedError():
             key = "exc_auth_dfb_remove_exists"
-            params["timestamp"] = disnake.utils.format_dt(exception.deletion_ts, "R")
+            params["timestamp"] = localisation.format_timestamp(exception.deletion_ts, "R")
 
         case exceptions.ArknightsDeletionAlreadyQueuedError():
             key = "exc_auth_ak_remove_exists"
-            params["timestamp"] = disnake.utils.format_dt(exception.deletion_ts, "R")
+            params["timestamp"] = localisation.format_timestamp(exception.deletion_ts, "R")
 
         case _:
             _LOGGER.trace("Exception went unhandled in local error handler.")
-            raise
+            raise exception
 
     params |= exception.to_dict()
-    wrapped = components.wrap_interaction(inter)
 
-    await wrapped.response.send_message(
-        localisation.localise(key, inter.locale, format_map=params),
-        components=msg_components,
+    await ctx.create_initial_response(
+        localisation.localise(key, ctx.interaction.locale, format_map=params),
+        component=await ryoshu.into_action_row(*msg_components) if msg_components else hikari.UNDEFINED,
         ephemeral=True,
     )
 
@@ -438,9 +472,9 @@ async def account_error_handler(
 
 @manager.as_exception_handler
 async def handle_component_exception(
-    _manager: components.ComponentManager,
-    _component: components.api.RichComponent,
-    inter: disnake.Interaction,
+    _manager: ryoshu.ComponentManager,
+    _component: ryoshu.api.ManagedComponent,
+    event: hikari.InteractionCreateEvent,
     exception: Exception,
 ) -> bool:
     """Handle auth component exceptions.
@@ -448,7 +482,8 @@ async def handle_component_exception(
     This passes exceptions to the above exception handler.
     """
     try:
-        return await account_error_handler(inter, exception)
+        # TODO: make this work somehow.
+        return await account_error_handler(event, exception)  # pyright: ignore
     except Exception:  # noqa: BLE001
         return False
 
@@ -457,6 +492,9 @@ async def handle_component_exception(
 
 
 async def _delayed_user_deletion(scheduled_deletion: database.ScheduledUserDeletion) -> None:
+    assert component.client
+    assert component.client.cache
+
     timedelta = scheduled_deletion.deletion_ts - datetime.datetime.now(tz=datetime.UTC)
     await asyncio.sleep(timedelta.total_seconds())
 
@@ -465,16 +503,19 @@ async def _delayed_user_deletion(scheduled_deletion: database.ScheduledUserDelet
 
     for account in accounts:
         try:
-            user = await plugin.bot.get_or_fetch_user(account.platform_id, strict=True)
+            user = (
+                component.client.cache.get_user(account.platform_id)
+                or await component.client.rest.fetch_user(account.platform_id)
+            )
             await user.send(
                 localisation.localise(
                     "auth_delete_success",
-                    disnake.Locale.en_GB,  # TODO: figure out some way of getting locale information
+                    "en-GB",  # TODO: figure out some way of getting locale information
                     format_map={"username": duffelbag_user.username},
                 ),
             )
 
-        except disnake.HTTPException:
+        except hikari.ForbiddenError:
             _LOGGER.warning(
                 "Failed to notify Discord user with id %i of their Duffelbag account deletion.",
                 account.platform_id,
@@ -486,6 +527,9 @@ async def _delayed_user_deletion(scheduled_deletion: database.ScheduledUserDelet
 async def _delayed_arknights_user_deletion(
     scheduled_deletion: database.ScheduledArknightsUserDeletion,
 ) -> None:
+    assert component.client
+    assert component.client.cache
+
     timedelta = scheduled_deletion.deletion_ts - datetime.datetime.now(tz=datetime.UTC)
     await asyncio.sleep(timedelta.total_seconds())
 
@@ -505,16 +549,19 @@ async def _delayed_arknights_user_deletion(
 
     for account in accounts:
         try:
-            user = await plugin.bot.get_or_fetch_user(account.platform_id, strict=True)
+            user = (
+                component.client.cache.get_user(account.platform_id)
+                or await component.client.rest.fetch_user(account.platform_id)
+            )
             await user.send(
                 localisation.localise(
                     "auth_ak_remove_success",
-                    disnake.Locale.en_GB,  # TODO: figure out some way of getting locale information
+                    "en-GB",  # TODO: figure out some way of getting locale information
                     format_map={"username": display_name},
                 ),
             )
 
-        except disnake.HTTPException:
+        except hikari.ForbiddenError:
             _LOGGER.warning(
                 "Failed to notify Discord user with id %i of their Arknights account deletion.",
                 account.platform_id,
@@ -534,14 +581,14 @@ def schedule_user_deletion(
         async_utils.safe_task(_delayed_arknights_user_deletion(scheduled_deletion))
 
 
-@plugin.load_hook()
+@component.with_client_callback(tanjun.ClientCallbackNames.STARTING)
 async def schedule_user_deletions() -> None:
     """Get scheduled user deletions and create tasks for them."""
     for scheduled_deletion in await auth.get_scheduled_user_deletions():
-        schedule_user_deletion(scheduled_deletion)
+        async_utils.safe_task(_delayed_user_deletion(scheduled_deletion))
 
     for scheduled_deletion in await auth.get_scheduled_arknights_user_deletions():
-        schedule_user_deletion(scheduled_deletion)
+        async_utils.safe_task(_delayed_arknights_user_deletion(scheduled_deletion))
 
 
-setup, teardown = plugin.create_extension_handlers()
+loader = component.make_loader()

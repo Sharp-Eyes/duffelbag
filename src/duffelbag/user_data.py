@@ -275,7 +275,7 @@ def format_skill_description(  # noqa: C901, PLR0912, PLR0915
     for i, c in desc_iter:
         if c == "<":
             i, c = next(desc_iter)  # noqa: PLW2901
-            if c in "@$":
+            if c == "@":
                 # Opening tag, check which markdown to use, then keep parsing.
                 tag_open = i
                 tag_name = ""
@@ -286,6 +286,19 @@ def format_skill_description(  # noqa: C901, PLR0912, PLR0915
                     tag_name += c
 
                 tag_md = TAG_LOOKUP[tag_name]
+                out_str += tag_md
+
+            elif c == "$":
+                # Opening tag for a hover tip, just make italic?
+                tag_open = i
+                tag_name = ""
+                for _, c in desc_iter:  # noqa: PLW2901
+                    if c == ">":
+                        break
+
+                    tag_name += c
+
+                tag_md = "*"
                 out_str += tag_md
 
             elif c == "/":
@@ -329,10 +342,17 @@ def format_skill_description(  # noqa: C901, PLR0912, PLR0915
                 fmt_spec = FMT_LOOKUP.get(aggregator, aggregator or "g")
             del aggregator
 
+            # Why, arknights, why?
+            if fmt_name.startswith("-"):
+                fmt_name = fmt_name[1:]
+                sign = -1
+            else:
+                sign = 1
+
             # Format blackboard item.
-            out_str += format(float(blackboard_map[fmt_name].value), fmt_spec)
+            out_str += format(sign * float(blackboard_map[fmt_name].value), fmt_spec)
             if blackboard_diff is not None:
-                out_str += diff_sep + format(float(blackboard_diff_map[fmt_name].value), fmt_spec)
+                out_str += diff_sep + format(sign * float(blackboard_diff_map[fmt_name].value), fmt_spec)
 
             fmt_name = fmt_spec = None
 

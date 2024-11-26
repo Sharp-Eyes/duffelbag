@@ -16,20 +16,11 @@ _all__: typing.Sequence[str] = (
 )
 
 
-# fmt: off
-_CHARACTER_DATA_URL: typing.Final[str] = (
-    "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/master/en_US/gamedata/excel/character_table.json"
-)
-_SKILL_DATA_URL: typing.Final[str] = (
-    "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/master/en_US/gamedata/excel/skill_table.json"
-)
-_ITEM_DATA_URL: typing.Final[str] = (
-    "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/master/en_US/gamedata/excel/item_table.json"
-)
-_TAG_DATA_URL: typing.Final[str] = (
-    "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/master/en_US/gamedata/excel/gacha_table.json"
-)
-# fmt: on
+_CHARACTER_DATA_URL: typing.Final = "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/master/en_US/gamedata/excel/character_table.json"
+_CHARACTER_PATCH_DATA_URL: typing.Final = "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/master/en_US/gamedata/excel/char_patch_table.json"
+_SKILL_DATA_URL: typing.Final = "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/master/en_US/gamedata/excel/skill_table.json"
+_ITEM_DATA_URL: typing.Final = "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/master/en_US/gamedata/excel/item_table.json"
+_TAG_DATA_URL: typing.Final = "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/master/en_US/gamedata/excel/gacha_table.json"
 
 
 async def fetch_characters(
@@ -56,11 +47,22 @@ async def fetch_characters(
     async with session.get(_CHARACTER_DATA_URL) as response:
         data = await response.json(content_type="text/plain")
 
-    return [
+    characters = [
         models.RawCharacter(**character)
         for id_, character in data.items()
         if id_.startswith("char") and not character["isNotObtainable"]
     ]
+
+    async with session.get(_CHARACTER_PATCH_DATA_URL) as response:
+        data = await response.json(content_type="text/plain")
+
+    characters.extend(
+        models.RawCharacter(**character)
+        for id_, character in data["patchChars"].items()
+        if id_.startswith("char")
+    )
+
+    return characters
 
 
 async def fetch_skills(

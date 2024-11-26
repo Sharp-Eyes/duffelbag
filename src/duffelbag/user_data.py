@@ -68,10 +68,7 @@ async def store_characters(arknights_user: database.ArknightsUser) -> None:
         database.UserCharacter.insert(*parsed_characters)
         .on_conflict(
             action="DO UPDATE",
-            target=(
-                database.UserCharacter.character_id,
-                database.UserCharacter.user_id,
-            ),
+            target=(database.UserCharacter.character_id, database.UserCharacter.user_id),
             values=database.all_columns_but_pk(database.UserCharacter),
         )
     )  # fmt: skip

@@ -18,6 +18,13 @@ class RawItem(pydantic.BaseModel):
     icon_id: str = pydantic.Field(alias="iconId")
 
     @pydantic.field_validator("description")
-    def parse_description(cls, value: str | None) -> str | None:  # noqa: N805
+    @classmethod
+    def parse_description(cls, value: str | None) -> str | None:
         """Get rid of <...> </> tags."""
         return re.sub(r"<.*?>(.*?)</>", r"**\1**", value) if value else None
+
+    @pydantic.field_validator("rarity", mode="before")
+    @classmethod
+    def parse_rarity(cls, value: str) -> int:
+        """Get rid of <...> </> tags."""
+        return int(value.removeprefix("TIER_"))

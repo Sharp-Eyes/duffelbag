@@ -40,7 +40,7 @@ class StaticSkillBlackboard(table.Table):
     id: columns.Serial
     skill_level_id = columns.ForeignKey(StaticSkillLevel)
     key = columns.Varchar(64)
-    value = columns.Decimal(digits=(8, 4))
+    value = columns.Decimal(digits=(12, 4))  # Need at least 10^7 -1 for Logos' execute
 
 
 class StaticCharacter(table.Table):

@@ -23,6 +23,9 @@ speedups = [
     "orjson>=3.10.12",
     "uvloop>=0.21.0",
 ]
+devtools = [
+    "ipykernel>=6.29.5",
+]
 
 [build-system]
 requires = ["hatchling"]

@@ -70,9 +70,10 @@ async def farm_add_goal_skill(ctx: tanjun.abc.SlashContext, character_name: str)
     skill_blackboards = await user_data.get_skill_level_blackboards(skill_level)
 
     skill_select_menu = SkillSelect.for_character(character, skill_localisations, initial=initial)
+    level_select_menu = await SkillLevelSelect.for_skill_select(skill_select_menu)
     await ctx.create_initial_response(
         embed=display_skill(character, skill_level, skill_localisations[initial], skill_blackboards),
-        component=await ryoshu.into_action_row(skill_select_menu),
+        components=await ryoshu.into_action_rows([[skill_select_menu], [level_select_menu]]),
         ephemeral=True,
     )
 
@@ -81,15 +82,17 @@ THUMB_FMT = "https://gamepress.gg/arknights/sites/arknights/files/game-images/sk
 
 
 def display_skill(
-    character: database.StaticCharacter | user_data.HybridCharacter,
+    character: str | database.StaticCharacter | user_data.HybridCharacter,
     skill_level: user_data.HybridSkillLevel,
     skill_localisation: database.StaticSkillLocalisation,
     blackboard: typing.Sequence[database.StaticSkillBlackboard],
 ) -> hikari.Embed:
     """Display information about a skill in an embed."""
     duration = "-" if skill_level.duration == -1 else skill_level.duration
+    character_name = character if isinstance(character, str) else character.name
+
     return hikari.Embed(
-        title=f"**{character.name}**",
+        title=f"**{character_name}**",
         description=(
             f"### Skill {skill_level.skill_num}\u2002•\u2002"
             f"{skill_localisation.name}\n\n"
@@ -112,6 +115,7 @@ class SkillSelect(ryoshu.ManagedTextSelectMenu):
 
     max_values: int = 1
 
+    character_name: str
     character_id: str
 
     @classmethod
@@ -132,7 +136,7 @@ class SkillSelect(ryoshu.ManagedTextSelectMenu):
             for i, skill in enumerate(skills)
         ]
 
-        return cls(options=options, character_id=character.id)
+        return cls(options=options, character_name=character.name, character_id=character.id)
 
     async def callback(self, event: hikari.InteractionCreateEvent) -> None:  # noqa: D102
         assert isinstance(event.interaction, hikari.ComponentInteraction)
@@ -151,10 +155,72 @@ class SkillSelect(ryoshu.ManagedTextSelectMenu):
         skill_level = await user_data.get_skill_at_level(character, skill_id=selected_id, level=1)
         skill_blackboards = await user_data.get_skill_level_blackboards(skill_level)
 
+        rows, _ = await manager.parse_message_components(event.interaction.message)
         await event.interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_UPDATE,
             embed=display_skill(character, skill_level, skill_localisation, skill_blackboards),
-            component=await ryoshu.into_action_row(self),
+            components=await ryoshu.into_action_rows(rows),
+            flags=hikari.MessageFlag.EPHEMERAL,
+        )
+
+
+@manager.register()
+class SkillLevelSelect(ryoshu.ManagedTextSelectMenu):
+    max_values: int = 1
+
+    @classmethod
+    async def for_skill_select(cls, skill_select: SkillSelect, /, *, initial: int = 0) -> "SkillLevelSelect":
+        for option in skill_select.options:
+            if option.is_default:
+                skill_id = option.value
+                break
+        else:
+            raise RuntimeError  # Unreachable
+
+        skill_levels = await database.StaticSkillLevel.objects().where(database.StaticSkillLevel.skill_id == skill_id)
+        options = [
+            hikari.impl.SelectOptionBuilder(
+                label=f"Level {skill_level.level}" if skill_level.level <= 7 else f"Mastery {skill_level.level - 7}",
+                value=str(skill_level.level),
+                is_default=(skill_level.level == initial),
+            )
+            for skill_level in skill_levels
+        ]
+
+        return cls(options=options)
+
+    async def callback(self, event: hikari.InteractionCreateEvent) -> None:
+        assert isinstance(event.interaction, hikari.ComponentInteraction)
+        for option in self.options:
+            option.set_is_default(option.value in event.interaction.values)
+
+        rows, managed_components = await manager.parse_message_components(event.interaction.message)
+        for component in managed_components:
+            if isinstance(component, SkillSelect):
+                break
+        else:
+            msg = "Could not find a SkillSelect."
+            raise LookupError(msg)
+
+        for option in component.options:
+            if option.is_default:
+                break
+        else:
+            raise RuntimeError  # Unreachable
+
+        character_id = component.character_id
+        character_name = component.character_name
+        skill_id = option.value
+        level = int(event.interaction.values[0])
+
+        skill_localisation = await user_data.get_skill_localisation(skill_id, character_id)
+        skill_level = await user_data.get_skill_at_level(character_id, skill_id, level=level)
+        skill_blackboards = await user_data.get_skill_level_blackboards(skill_level)
+
+        await event.interaction.create_initial_response(
+            response_type=hikari.ResponseType.MESSAGE_UPDATE,
+            embed=display_skill(character_name, skill_level, skill_localisation, skill_blackboards),
+            components=await ryoshu.into_action_rows(rows),
             flags=hikari.MessageFlag.EPHEMERAL,
         )
 

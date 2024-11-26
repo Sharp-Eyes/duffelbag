@@ -192,14 +192,21 @@ async def get_skill_localisation(
 
 
 async def get_skill_at_level(
-    character: database.StaticCharacter | database.UserCharacter | HybridCharacter,
+    character: str | database.StaticCharacter | database.UserCharacter | HybridCharacter,
     skill_id: str,
     level: int,
 ) -> HybridSkillLevel:
     """Get aggregate skill information for a character's skill at a given level."""
     joined = database.StaticCharacterSkill.skill_id.join_on(database.StaticSkillLevel.skill_id)
 
-    character_id = character.id if isinstance(character, database.StaticCharacter) else character.character_id
+    if isinstance(character, str):
+        character_id = character
+    elif isinstance(character, database.StaticCharacter):
+        character_id = character.id
+    else:
+        character_id = character.character_id
+
+    print(character_id, skill_id, level)
 
     skill = await (
         database.StaticCharacterSkill.select(  # type: ignore
@@ -219,11 +226,21 @@ async def get_skill_at_level(
     return HybridSkillLevel.model_validate(skill)
 
 
-async def get_skill_level_blackboards(skill: HybridSkillLevel) -> typing.Sequence[database.StaticSkillBlackboard]:
+async def get_skill_level_blackboards(
+    skill_level: int | database.StaticSkillLevel | HybridSkillLevel,
+) -> typing.Sequence[database.StaticSkillBlackboard]:
     """Get blackboard entries for a given skill level."""
+
+    if isinstance(skill_level, int):
+        skill_level_id = int
+    elif isinstance(skill_level, database.StaticSkillLevel):
+        skill_level_id = skill_level.id
+    else:
+        skill_level_id = skill_level.skill_level_id
+
     return await (
         database.StaticSkillBlackboard.objects()
-        .where(database.StaticSkillBlackboard.skill_level_id == skill.skill_level_id)
+        .where(database.StaticSkillBlackboard.skill_level_id == skill_level_id)
     )
 
 

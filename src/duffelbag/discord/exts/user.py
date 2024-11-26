@@ -1,6 +1,6 @@
 """Foobar."""
 
-import functools
+import decimal
 import typing
 
 import hikari
@@ -16,8 +16,6 @@ manager = ryoshu.get_manager("duffelbag.user")
 
 
 game_data_group = component.with_slash_command(tanjun.slash_command_group("game-data", "Do stuff with game data."))
-# farm_group = component.with_slash_command(tanjun.slash_command_group("farm", "Set or view farming goals."))
-# farm_add_goal_group = farm_group.make_sub_group("add-goal", "Set a new farming goal.")
 
 
 @game_data_group.as_sub_command("sync-characters", "Sync your arknights characters.")
@@ -37,73 +35,136 @@ async def game_data_sync_characters(ctx: tanjun.abc.SlashContext) -> None:
 
 
 @tanjun.with_str_slash_option(
-    "character_name",
+    "character",
     "The character for whom you wish to farm a mastery.",
+    key="character_id",
     min_length=1,  # W (1 char) ~ Skadi the Corrupting Heart (26 chars).
     max_length=32,
 )
 @game_data_group.as_sub_command("skill", "Add a skill mastery to your farming goals.")
-async def farm_add_goal_skill(ctx: tanjun.abc.SlashContext, character_name: str) -> None:
+async def game_data_skill(ctx: tanjun.abc.SlashContext, character_id: str) -> None:
     """Add a skill mastery to your farming goals.
 
     Parameters
     ----------
     ctx:
         The interaction from discord.
-    character_name:
+    character_id:
         The character for whom you wish to unlock masteries.
 
     """
     character = await (
         database.StaticCharacter.objects()
-        .where(database.StaticCharacter.name == character_name)
+        .where(database.StaticCharacter.id == character_id)
         .first()
     )
 
     if character is None:
-        msg = f"Could not find a character with name {character_name}"
-        raise LookupError(msg)
+        msg = f"Could not find a character for input: {character_id}"
+        raise LookupError(msg)  # TODO: Custom error for external handling
 
-    initial = 0
+    init_skill = 0
+    init_level = 1
+
     skill_localisations = await user_data.get_skill_localisations(character)
-    skill_level = await user_data.get_skill_at_level(character, skill_id=skill_localisations[initial].skill_id, level=1)
+    skill_localisation = skill_localisations[init_skill]
+    skill_level = await user_data.get_skill_at_level(character, skill_id=skill_localisation.skill_id, level=init_level)
     skill_blackboards = await user_data.get_skill_level_blackboards(skill_level)
-
-    skill_select_menu = SkillSelect.for_character(character, skill_localisations, initial=initial)
+    skill_select_menu = SkillSelect.for_character(character, skill_localisations, initial=init_skill)
     level_select_menu = await SkillLevelSelect.for_skill_select(skill_select_menu)
+
     await ctx.create_initial_response(
-        embed=display_skill(character, skill_level, skill_localisations[initial], skill_blackboards),
+        embed=display_skill(
+            character=character,
+            skill_level=skill_level,
+            skill_localisation=skill_localisation,
+            blackboard=skill_blackboards,
+        ),
         components=await ryoshu.into_action_rows([[skill_select_menu], [level_select_menu]]),
         ephemeral=True,
     )
 
 
-THUMB_FMT = "https://gamepress.gg/arknights/sites/arknights/files/game-images/skills/skill_icon_{}.png"
+THUMB_FMT = "https://raw.githubusercontent.com/ArknightsAssets/ArknightsAssets/refs/heads/cn/assets/torappu/dynamicassets/arts/skills/skill_icon_{skill_id}.png"
+THUMB_FMT_SKCOM = "https://raw.githubusercontent.com/ArknightsAssets/ArknightsAssets/refs/heads/cn/assets/torappu/dynamicassets/arts/skills/skill_icon_{skill_id}/skill_icon_{skill_id}.png/skill_icon_{skill_id}.png"
 
 
-def display_skill(
+def display_duration(duration: decimal.Decimal) -> str:
+    """Turn a skill duration into a human-readable string."""
+    return "\u221E" if duration == -1 else format(float(duration), "g")
+
+
+SP_TYPE_DISPLAY_MAP = {
+    "INCREASE_WHEN_ATTACK": "Offensive",
+    "INCREASE_WHEN_TAKEN_DAMAGE": "Defensive",
+    "INCREASE_WITH_TIME": "Auto",
+    "ON_DEPLOYMENT": "Passive",
+}
+
+SKILL_TYPE_DISPLAY_MAP = {
+    "AUTO": "Auto",
+    "MANUAL": "Manual",
+    "PASSIVE": "Passive",
+}
+
+DURATION_TYPE_DISPLAY_MAP = {
+    "NONE": "Duration",
+    "AMMO": "Ammo",
+}
+
+def display_skill(  # noqa: PLR0913
+    *,
     character: str | database.StaticCharacter | user_data.HybridCharacter,
     skill_level: user_data.HybridSkillLevel,
-    skill_localisation: database.StaticSkillLocalisation,
+    skill_level_diff: user_data.HybridSkillLevel | None = None,
     blackboard: typing.Sequence[database.StaticSkillBlackboard],
+    blackboard_diff: typing.Sequence[database.StaticSkillBlackboard] | None = None,
+    skill_localisation: database.StaticSkillLocalisation,
+    sep: str = "\u2002\u2022\u2002",
+    diff_sep: str = " \u2192 ",
 ) -> hikari.Embed:
     """Display information about a skill in an embed."""
-    duration = "-" if skill_level.duration == -1 else skill_level.duration
     character_name = character if isinstance(character, str) else character.name
 
-    return hikari.Embed(
-        title=f"**{character_name}**",
-        description=(
-            f"### Skill {skill_level.skill_num}\u2002•\u2002"
-            f"{skill_localisation.name}\n\n"
-            f"SP Cost: {skill_level.sp_cost}\u2002•\u2002"
-            f"Initial SP: {skill_level.initial_sp}\u2002•\u2002"
-            f"SP Charge Type: {skill_level.sp_type.replace("_", " ")}\n"
-            f"Skill Activation: {skill_level.skill_type}\u2002•\u2002"
-            f"Duration: {duration}\n\n"
-            f"{user_data.format_skill_description(skill_localisation, blackboard)}"
-        ),
-    ).set_thumbnail(THUMB_FMT.format(skill_level.skill_id))
+    if skill_level_diff is None:
+        duration = display_duration(skill_level.duration)
+        sp_cost = skill_level.sp_cost
+        initial_sp = skill_level.initial_sp
+        title_hint = user_data.display_skill_level(skill_level.level)
+    else:
+        duration = f"{display_duration(skill_level.duration)}{diff_sep}{display_duration(skill_level_diff.duration)}"
+        sp_cost = f"{skill_level.sp_cost}{diff_sep}{skill_level_diff.sp_cost}"
+        initial_sp = f"{skill_level.initial_sp}{diff_sep}{skill_level_diff.initial_sp}"
+        title_hint = (
+            f"Comparing {user_data.display_skill_level(skill_level.level)}{diff_sep}"
+            f"{user_data.display_skill_level(skill_level_diff.level)}"
+        )
+
+    thumbnail_fmt = (THUMB_FMT_SKCOM if "skcom" in skill_level.skill_id else THUMB_FMT)
+    thumbnail = thumbnail_fmt.format(skill_id=skill_level.skill_id)
+
+    sp_type = SP_TYPE_DISPLAY_MAP[skill_level.sp_type]
+    skill_type = SKILL_TYPE_DISPLAY_MAP[skill_level.skill_type]
+    description = user_data.format_skill_description(
+        skill_localisation,
+        blackboard=blackboard,
+        blackboard_diff=blackboard_diff,
+        diff_sep=diff_sep,
+    )
+
+    return (
+        hikari.Embed(
+            title=f"**{character_name}**",
+            description=(
+                f"### Skill {skill_level.skill_num}{sep}{skill_localisation.name}{sep}{title_hint}\n\n"
+                f"SP Cost: **{sp_cost}**{sep}Initial SP: **{initial_sp}**{sep}Duration: **{duration}**\n"
+                f"SP Recovery: **{sp_type}**{sep}Skill Activation: **{skill_type}**\n\n"
+                f"{description}\n\n"
+                f"-# Tip: select more than one level to compare stats!"
+            ),
+        )
+        .set_thumbnail(thumbnail)
+    )
 
 
 @manager.register()
@@ -158,7 +219,12 @@ class SkillSelect(ryoshu.ManagedTextSelectMenu):
         rows, _ = await manager.parse_message_components(event.interaction.message)
         await event.interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_UPDATE,
-            embed=display_skill(character, skill_level, skill_localisation, skill_blackboards),
+            embed=display_skill(
+                character=character,
+                skill_level=skill_level,
+                skill_localisation=skill_localisation,
+                blackboard=skill_blackboards,
+            ),
             components=await ryoshu.into_action_rows(rows),
             flags=hikari.MessageFlag.EPHEMERAL,
         )
@@ -166,10 +232,16 @@ class SkillSelect(ryoshu.ManagedTextSelectMenu):
 
 @manager.register()
 class SkillLevelSelect(ryoshu.ManagedTextSelectMenu):
-    max_values: int = 1
+    """Select menu that allows a user to browse skill levels.
+
+    Intended to be used in tandem with a SkillSelect.
+    """
+
+    max_values: int = 2
 
     @classmethod
-    async def for_skill_select(cls, skill_select: SkillSelect, /, *, initial: int = 0) -> "SkillLevelSelect":
+    async def for_skill_select(cls, skill_select: SkillSelect, /, *, initial: int = 1) -> "SkillLevelSelect":
+        """Make a skill level select menu for a corresponding skill select menu."""
         for option in skill_select.options:
             if option.is_default:
                 skill_id = option.value
@@ -180,7 +252,7 @@ class SkillLevelSelect(ryoshu.ManagedTextSelectMenu):
         skill_levels = await database.StaticSkillLevel.objects().where(database.StaticSkillLevel.skill_id == skill_id)
         options = [
             hikari.impl.SelectOptionBuilder(
-                label=f"Level {skill_level.level}" if skill_level.level <= 7 else f"Mastery {skill_level.level - 7}",
+                label=user_data.display_skill_level(skill_level),
                 value=str(skill_level.level),
                 is_default=(skill_level.level == initial),
             )
@@ -189,7 +261,7 @@ class SkillLevelSelect(ryoshu.ManagedTextSelectMenu):
 
         return cls(options=options)
 
-    async def callback(self, event: hikari.InteractionCreateEvent) -> None:
+    async def callback(self, event: hikari.InteractionCreateEvent) -> None:  # noqa: D102
         assert isinstance(event.interaction, hikari.ComponentInteraction)
         for option in self.options:
             option.set_is_default(option.value in event.interaction.values)
@@ -211,15 +283,34 @@ class SkillLevelSelect(ryoshu.ManagedTextSelectMenu):
         character_id = component.character_id
         character_name = component.character_name
         skill_id = option.value
-        level = int(event.interaction.values[0])
-
         skill_localisation = await user_data.get_skill_localisation(skill_id, character_id)
-        skill_level = await user_data.get_skill_at_level(character_id, skill_id, level=level)
-        skill_blackboards = await user_data.get_skill_level_blackboards(skill_level)
+
+        if len(event.interaction.values) == self.max_values:
+            low, high = sorted(map(int, event.interaction.values))
+
+            skill_level = await user_data.get_skill_at_level(character_id, skill_id, level=low)
+            skill_level_diff = await user_data.get_skill_at_level(character_id, skill_id, level=high)
+            skill_blackboards = await user_data.get_skill_level_blackboards(skill_level)
+            skill_blackboards_diff = await user_data.get_skill_level_blackboards(skill_level_diff)
+
+        else:
+            level = int(event.interaction.values[0])
+
+            skill_level = await user_data.get_skill_at_level(character_id, skill_id, level=level)
+            skill_level_diff = None
+            skill_blackboards = await user_data.get_skill_level_blackboards(skill_level)
+            skill_blackboards_diff = None
 
         await event.interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_UPDATE,
-            embed=display_skill(character_name, skill_level, skill_localisation, skill_blackboards),
+            embed=display_skill(
+                character=character_name,
+                skill_localisation=skill_localisation,
+                skill_level=skill_level,
+                skill_level_diff=skill_level_diff,
+                blackboard=skill_blackboards,
+                blackboard_diff=skill_blackboards_diff,
+            ),
             components=await ryoshu.into_action_rows(rows),
             flags=hikari.MessageFlag.EPHEMERAL,
         )
@@ -229,7 +320,7 @@ async def character_autocomplete_template(  # noqa: PLR0913
     ctx: tanjun.abc.AutocompleteContext,
     input_: str,
     *,
-    characters: dict[str, str],
+    characters: typing.Mapping[str, str],
     min_results: int,
     max_results: int,
     score_cutoff: float,
@@ -263,26 +354,27 @@ async def character_autocomplete_template(  # noqa: PLR0913
     await ctx.set_choices(options)
 
 
-@component.with_client_callback(tanjun.ClientCallbackNames.STARTING)
-async def finalise_char_autocompleters() -> None:
-    """Finalise the character autocomplete template with various settings for various commands."""
+async def _get_all_characters() -> typing.Mapping[str, str]:
     characters = await database.StaticCharacter.objects()
+    return {character.name: character.id for character in characters}
 
-    # TODO: Maybe we can make this happen with DI somehow?
-    min_mastery_rarity = 4  # 3* ops and below cannot have masteries.
-    mastery_autocomplete = functools.partial(
-        character_autocomplete_template,
-        characters={
-            character.name: character.id
-            for character in characters
-            if character.rarity >= min_mastery_rarity
-        },
+
+@game_data_skill.with_str_autocomplete("character")
+async def character_autocomplete(
+    ctx: tanjun.abc.AutocompleteContext,
+    input_: str,
+    *,
+    characters: typing.Mapping[str, str] = tanjun.cached_inject(_get_all_characters),
+) -> None:
+    """Fuzzy-match over *all* arknights characters."""
+    await character_autocomplete_template(
+        ctx,
+        input_,
+        characters=characters,
         min_results=3,
         max_results=10,
         score_cutoff=80,
     )
-
-    farm_add_goal_skill.set_str_autocomplete("character_name", mastery_autocomplete)
 
 
 loader = component.make_loader()

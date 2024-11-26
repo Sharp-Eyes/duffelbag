@@ -206,8 +206,6 @@ async def get_skill_at_level(
     else:
         character_id = character.character_id
 
-    print(character_id, skill_id, level)
-
     skill = await (
         database.StaticCharacterSkill.select(  # type: ignore
             *database.StaticCharacterSkill.all_columns(),
@@ -230,7 +228,6 @@ async def get_skill_level_blackboards(
     skill_level: int | database.StaticSkillLevel | HybridSkillLevel,
 ) -> typing.Sequence[database.StaticSkillBlackboard]:
     """Get blackboard entries for a given skill level."""
-
     if isinstance(skill_level, int):
         skill_level_id = int
     elif isinstance(skill_level, database.StaticSkillLevel):
@@ -247,6 +244,7 @@ async def get_skill_level_blackboards(
 TAG_LOOKUP = {
     "ba.vup": "**",
     "ba.rem": "__",
+    "ba.stun": "__",
 }
 
 FMT_LOOKUP = {
@@ -255,10 +253,14 @@ FMT_LOOKUP = {
 
 def format_skill_description(  # noqa: C901, PLR0912, PLR0915
     skill_localisation: database.StaticSkillLocalisation,
+    *,
     blackboard: typing.Sequence[database.StaticSkillBlackboard],
+    blackboard_diff: typing.Sequence[database.StaticSkillBlackboard] | None = None,
+    diff_sep: str = " \u2192 ",
 ) -> str:
     """Resolve markup tags and blackboard entries into a description string."""
     blackboard_map = {blackboard_entry.key: blackboard_entry for blackboard_entry in blackboard}
+    blackboard_diff_map = {blackboard_entry.key: blackboard_entry for blackboard_entry in blackboard_diff or ()}
 
     tag_open: int | None = None
     tag_name: str | None = None
@@ -273,7 +275,7 @@ def format_skill_description(  # noqa: C901, PLR0912, PLR0915
     for i, c in desc_iter:
         if c == "<":
             i, c = next(desc_iter)  # noqa: PLW2901
-            if c == "@":
+            if c in "@$":
                 # Opening tag, check which markdown to use, then keep parsing.
                 tag_open = i
                 tag_name = ""
@@ -322,13 +324,15 @@ def format_skill_description(  # noqa: C901, PLR0912, PLR0915
 
             if fmt_name is None:
                 fmt_name = aggregator
-                fmt_spec = ""
+                fmt_spec = "g"
             else:
-                fmt_spec = aggregator
+                fmt_spec = FMT_LOOKUP.get(aggregator, aggregator or "g")
             del aggregator
 
             # Format blackboard item.
-            out_str += format(blackboard_map[fmt_name].value, FMT_LOOKUP.get(fmt_spec, fmt_spec))
+            out_str += format(float(blackboard_map[fmt_name].value), fmt_spec)
+            if blackboard_diff is not None:
+                out_str += diff_sep + format(float(blackboard_diff_map[fmt_name].value), fmt_spec)
 
             fmt_name = fmt_spec = None
 
@@ -336,3 +340,14 @@ def format_skill_description(  # noqa: C901, PLR0912, PLR0915
             out_str += c
 
     return out_str
+
+
+MASTERY_THRESHOLD: typing.Final = 7
+
+
+def display_skill_level(skill_level: int | database.StaticSkillLevel | HybridSkillLevel) -> str:
+    """Display a skill level as a human-readable string."""
+    if not isinstance(skill_level, int):
+        skill_level = skill_level.level
+
+    return f"Level {skill_level}" if skill_level <= MASTERY_THRESHOLD else f"Mastery {skill_level - MASTERY_THRESHOLD}"

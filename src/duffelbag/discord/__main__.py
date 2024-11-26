@@ -68,6 +68,7 @@ async def _main() -> None:
                 "duffelbag.discord.exts.auth",
                 "duffelbag.discord.exts.eval",
                 "duffelbag.discord.exts.expand_button",
+                "duffelbag.discord.exts.user",
             )
         )
 

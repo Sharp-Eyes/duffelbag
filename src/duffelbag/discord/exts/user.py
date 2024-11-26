@@ -202,3 +202,6 @@ async def finalise_char_autocompleters() -> None:
     )
 
     farm_add_goal_skill.set_str_autocomplete("character_name", mastery_autocomplete)
+
+
+loader = component.make_loader()

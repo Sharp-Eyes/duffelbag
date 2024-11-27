@@ -5,67 +5,70 @@ import typing
 import rapidfuzz
 import tanjun
 
-OutT = typing.TypeVar("OutT", str, int, float)
+AutocompleteValueT = typing.TypeVar("AutocompleteValueT", str, int, float)
+RetT = typing.TypeVar("RetT")
+
+ConverterSig = typing.Callable[
+    typing.Concatenate[AutocompleteValueT, ...],
+    RetT | typing.Coroutine[typing.Any, typing.Any, RetT],
+]
 
 
-class ChoicesProviderCallback(typing.Protocol):
+class ChoicesProviderCallback(typing.Protocol[AutocompleteValueT]):
     def __call__(
         self,
         argument: str,
         /,
         *,
-        objects: typing.Mapping[str, OutT],
         min_results: int,
         max_results: int,
-        score_cutoff: float,
-    ) -> typing.Mapping[str, OutT]:
+    ) -> typing.Mapping[str, AutocompleteValueT] | typing.Coroutine[typing.Any, typing.Any, typing.Mapping[str, AutocompleteValueT]]:
         ...
 
 
-async def find_best_choices(
+def find_best_choices(
     argument: str,
     /,
     *,
-    objects: typing.Mapping[str, OutT],
+    objects: typing.Mapping[str, AutocompleteValueT],
     min_results: int,
     max_results: int,
     score_cutoff: float,
-) -> typing.Mapping[str, OutT]:
+) -> typing.Mapping[str, AutocompleteValueT]:
     """Template function for autocompleters."""
     if not argument:
         # Truncate to first 25 options...
-        options: typing.Mapping[str, OutT] = dict(pair for pair, _ in zip(objects.items(), range(25), strict=False))
-
-    else:
-        matches = rapidfuzz.process.extract(
-            argument,
-            objects.keys(),
-            processor=rapidfuzz.utils.default_process,
-            limit=max_results,
+        return dict(
+            pair
+            for pair, _ in zip(objects.items(), range(25), strict=False)
         )
 
-        options: typing.Mapping[str, OutT] = {}
-        for i, (match, score, _) in enumerate(matches):
-            # Only return results that match "well enough". If there aren't enough
-            # results, return at least a given minimum.
-            if i >= min_results and score < score_cutoff:
-                break
+    matches = rapidfuzz.process.extract(
+        argument,
+        objects.keys(),
+        processor=rapidfuzz.utils.default_process,
+        limit=max_results,
+    )
 
-            options[match] = objects[match]
+    options: typing.Mapping[str, AutocompleteValueT] = {}
+    for i, (match, score, _) in enumerate(matches):
+        # Only return results that match "well enough". If there aren't enough
+        # results, return at least a given minimum.
+        if i >= min_results and score < score_cutoff:
+            break
+
+        options[match] = objects[match]
 
     return options
 
 
+def into_retry_converter(
+    converter: ConverterSig[AutocompleteValueT, RetT | None],
+    choices_provider: ChoicesProviderCallback,
+) -> ConverterSig[AutocompleteValueT, RetT]:
 
-RetT = typing.TypeVar("RetT")
-
-
-async def retry_converter_factory(
-    converter: typing.Callable[[str], RetT],
-    option_provider: ChoicesProviderCallback,
-):
     async def retry_converter(
-        argument: str,
+        argument: AutocompleteValueT,
         *,
         ctx: tanjun.abc.SlashContext = tanjun.inject(type=tanjun.abc.SlashContext),
     ) -> RetT:
@@ -74,25 +77,30 @@ async def retry_converter_factory(
         if result:
             return result
 
-        options = await ctx.call_with_async_di(
-            option_provider,
+        # Retry with best match for input...
+        choices = await ctx.call_with_async_di(
+            choices_provider,
             argument,
             min_results=0,
             max_results=1,
         )
-        if not options:
+        if not choices:
             raise LookupError
 
-        best_match = next(iter(options.values()))
-        return await ctx.call_with_async_di(converter, best_match)
+        result = await ctx.call_with_async_di(converter, get_first_choice(choices))
+        if result:
+            return result
+
+        raise LookupError
 
     return retry_converter
 
 
-async def autocompleter_factory(
-    option_provider: ChoicesProviderCallback,
-):
-    async def autocompleter(ctx: tanjun.abc.AutocompleteContext, argument: str) -> None:
+def into_autocompleter(
+    option_provider: ChoicesProviderCallback[AutocompleteValueT],
+) -> tanjun.abc.AutocompleteSig[AutocompleteValueT]:
+
+    async def autocompleter(ctx: tanjun.abc.AutocompleteContext, argument: AutocompleteValueT, /) -> None:
         """Fuzzy-match over all arknights characters with at least one skill."""
         await ctx.set_choices(
             await ctx.call_with_async_di(
@@ -102,3 +110,12 @@ async def autocompleter_factory(
         )
 
     return autocompleter
+
+
+def get_first_choice(choices: typing.Mapping[str, AutocompleteValueT]) -> AutocompleteValueT:
+    return next(iter(choices.values()))
+
+
+def get_command_option(option_name: str):
+    def getter(ctx: tanjun.abc.AutocompleteContext = tanjun.inject(type=tanjun.abc.AutocompleteContext)):
+        return ctx.options

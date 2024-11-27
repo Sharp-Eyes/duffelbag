@@ -46,20 +46,76 @@ async def _get_characters_with_skills() -> typing.Mapping[str, str]:
     }
 
 
-async def get_skill_character_options(
+async def _into_character(argument: str) -> database.StaticCharacter | None:
+    return await (
+        database.StaticCharacter.objects()
+        .where(database.StaticCharacter.id == argument)
+        .first()
+    )
+
+
+async def _provide_skill_character_choices(
     argument: str,
     *,
     min_results: int = 3,
     max_results: int = 10,
-    score_cutoff: int = 80,
+    score_cutoff: float = 80.0,
     characters: typing.Mapping[str, str] = tanjun.cached_inject(_get_characters_with_skills),
 ) -> typing.Mapping[str, str]:
-    return await autocomplete.find_best_choices(
+    return autocomplete.find_best_choices(
         argument,
         objects=characters,
         min_results=min_results,
         max_results=max_results,
         score_cutoff=score_cutoff,
+    )
+
+
+async def _into_skill(argument: str) -> database.StaticCharacterSkill:
+    ...
+
+
+async def _provide_skill_choices(
+    argument: str,
+    *,
+    min_results: int = 3,
+    max_results: int = 10,
+    ctx: tanjun.abc.AutocompleteContext = tanjun.inject(type=tanjun.abc.AutocompleteContext),
+) -> typing.Mapping[str, str]:
+    character_id = ctx.options["character"].value
+    assert isinstance(character_id, str)
+
+    print(character_id)
+
+    # Ensure we actually have a character...
+    character_id = autocomplete.get_first_choice(
+        await ctx.call_with_async_di(
+            _provide_skill_character_choices,
+            character_id,
+            min_results=1,
+            max_results=1,
+        ),
+    )
+
+    joined = database.StaticSkillLocalisation.skill_id.join_on(database.StaticCharacterSkill.skill_id)
+    skill_data = await (
+        database.StaticSkillLocalisation.select(
+            database.StaticSkillLocalisation.name,
+            database.StaticSkillLocalisation.skill_id,
+            joined.skill_num.as_alias("skill_num"),
+        )
+        .where(joined.character_id == character_id)
+    )
+
+    skill_choices = {skill["name"]: skill["skill_id"] for skill in skill_data}
+    skill_choices |= {f"S{skill["skill_num"]}": skill["skill_id"] for skill in skill_data}
+
+    return autocomplete.find_best_choices(
+        argument,
+        objects=skill_choices,
+        min_results=3,
+        max_results=10,
+        score_cutoff=80,
     )
 
 
@@ -78,13 +134,14 @@ async def get_skill_character_options(
     "skill",
     "The skill you want to check. If omitted, defaults to skill 1.",
     default="S1",
+    autocomplete=autocomplete.into_autocompleter(_provide_skill_choices),
     key="skill_input",
 )
 @tanjun.with_str_slash_option(
     "character",
     "The character whose skills you want to check.",
-    autocomplete=skill_character_autocomplete,
-    converters=skill_character_converter,
+    autocomplete=autocomplete.into_autocompleter(_provide_skill_character_choices),
+    converters=autocomplete.into_retry_converter(_into_character, _provide_skill_character_choices),
     min_length=1,  # W (1 char) ~ Skadi the Corrupting Heart (26 chars).
     max_length=32,
 )
@@ -116,6 +173,7 @@ async def game_data_skill(
     skill_localisation = skill_localisations[init_skill]
     skill_level = await user_data.get_skill_at_level(character, skill_id=skill_localisation.skill_id, level=init_level)
     skill_blackboards = await user_data.get_skill_level_blackboards(skill_level)
+
     skill_select_menu = SkillSelect.for_character(character, skill_localisations, initial=init_skill)
     level_select_menu = await SkillLevelSelect.for_skill_select(skill_select_menu, initial=init_level)
 

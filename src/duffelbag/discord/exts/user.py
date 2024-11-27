@@ -34,6 +34,11 @@ async def game_data_sync_characters(ctx: tanjun.abc.SlashContext) -> None:
     await ctx.edit_last_response("Successfully synced your character data!")
 
 
+@tanjun.with_bool_slash_option(
+    "hidden",
+    "Whether you want other people to be able to see the result of this command.",
+    default=True,
+)
 @tanjun.with_str_slash_option(
     "character",
     "The character for whom you wish to farm a mastery.",
@@ -42,7 +47,7 @@ async def game_data_sync_characters(ctx: tanjun.abc.SlashContext) -> None:
     max_length=32,
 )
 @game_data_group.as_sub_command("skill", "Add a skill mastery to your farming goals.")
-async def game_data_skill(ctx: tanjun.abc.SlashContext, character_id: str) -> None:
+async def game_data_skill(ctx: tanjun.abc.SlashContext, character_id: str, *, hidden: bool = True) -> None:
     """Add a skill mastery to your farming goals.
 
     Parameters
@@ -51,6 +56,8 @@ async def game_data_skill(ctx: tanjun.abc.SlashContext, character_id: str) -> No
         The interaction from discord.
     character_id:
         The character for whom you wish to unlock masteries.
+    hidden:
+        Whether you want other people to be able to see the result of this command.
 
     """
     character = await (
@@ -71,7 +78,7 @@ async def game_data_skill(ctx: tanjun.abc.SlashContext, character_id: str) -> No
     skill_level = await user_data.get_skill_at_level(character, skill_id=skill_localisation.skill_id, level=init_level)
     skill_blackboards = await user_data.get_skill_level_blackboards(skill_level)
     skill_select_menu = SkillSelect.for_character(character, skill_localisations, initial=init_skill)
-    level_select_menu = await SkillLevelSelect.for_skill_select(skill_select_menu)
+    level_select_menu = await SkillLevelSelect.for_skill_select(skill_select_menu, initial=init_level)
 
     await ctx.create_initial_response(
         embed=display_skill(
@@ -81,7 +88,7 @@ async def game_data_skill(ctx: tanjun.abc.SlashContext, character_id: str) -> No
             blackboard=skill_blackboards,
         ),
         components=await ryoshu.into_action_rows([[skill_select_menu], [level_select_menu]]),
-        ephemeral=True,
+        ephemeral=hidden,
     )
 
 
@@ -156,7 +163,7 @@ def display_skill(  # noqa: PLR0913
         hikari.Embed(
             title=f"**{character_name}**",
             description=(
-                f"### Skill {skill_level.skill_num}{sep}{skill_localisation.name}{sep}{title_hint}\n\n"
+                f"### {skill_localisation.name} (S{skill_level.skill_num}){sep}{title_hint}\n\n"
                 f"SP Cost: **{sp_cost}**{sep}Initial SP: **{initial_sp}**{sep}Duration: **{duration}**\n"
                 f"SP Recovery: **{sp_type}**{sep}Skill Activation: **{skill_type}**\n\n"
                 f"{description}\n\n"
@@ -354,9 +361,16 @@ async def character_autocomplete_template(  # noqa: PLR0913
     await ctx.set_choices(options)
 
 
-async def _get_all_characters() -> typing.Mapping[str, str]:
-    characters = await database.StaticCharacter.objects()
-    return {character.name: character.id for character in characters}
+async def _get_characters_with_skills() -> typing.Mapping[str, str]:
+    joined = database.StaticCharacter.id.join_on(database.StaticCharacterSkill.character_id)
+    characters = await (
+        database.StaticCharacter.select(database.StaticCharacter.name, joined.character_id)
+        .where(database.StaticCharacter.id == joined.character_id)
+    )
+    return {
+        character["name"]: character["id.character_id"]
+        for character in characters
+    }
 
 
 @game_data_skill.with_str_autocomplete("character")
@@ -364,7 +378,7 @@ async def character_autocomplete(
     ctx: tanjun.abc.AutocompleteContext,
     input_: str,
     *,
-    characters: typing.Mapping[str, str] = tanjun.cached_inject(_get_all_characters),
+    characters: typing.Mapping[str, str] = tanjun.cached_inject(_get_characters_with_skills),
 ) -> None:
     """Fuzzy-match over *all* arknights characters."""
     await character_autocomplete_template(

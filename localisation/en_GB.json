@@ -15,7 +15,7 @@
     "auth_bind_ak_success_active": "## Successfully bound your Arknights account!\nYour arknights account has been successfully bound to your Duffelbag account.\nThis account has been marked as your active account. If you wish to change this, please use {cmd$account_arknights_set-active}",
     "auth_bind_ak_invalid_vcode": "## Invalid verification code!\n{code} is not a valid verification code. Please ensure that the code entered consists of exactly 6 digits.",
     "auth_ak_set_active": "## Activate an account!\nPlease select the account you wish to activate from the dropdown menu below.",
-    "auth_ak_set_active_success": "## Successfully activated your Arknights account!\nYour Arknights account on the {server} server with email address {email} has been set as your active account.\nAll commands will now use this account's data.",
+    "auth_ak_set_active_success": "## Successfully activated your Arknights account!\nYour Arknights account **{username} [{server}]** has been set as your active account.\nAll commands will now use this account's data.",
     "auth_ak_remove_msg": "## Select an account!\nPlease select the Arknights account you would like to unbind from your Duffelbag account.",
     "auth_ak_remove_schedule": "## Arknights account successfully scheduled for unbinding!\nYour Arknights account has successfully been scheduled for unbinding **{timestamp}**. In case you wish to undo this, please use [TO BE IMPLEMENTED].",
     "auth_ak_remove_success": "## Successfully unbound your Arknights account!\nYour Arknights account named **{username}** has been unbound from your Duffelbag account.",

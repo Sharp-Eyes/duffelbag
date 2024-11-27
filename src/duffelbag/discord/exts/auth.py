@@ -27,6 +27,8 @@ _PASS_DESC = f"The password to use. Must be between {auth.MIN_PASS_LEN} and {aut
 
 
 component = tanjun.Component(name=__name__)
+hooks = tanjun.AnyHooks()
+
 manager = ryoshu.get_manager("duffelbag.auth")
 root_manager = ryoshu.get_manager()
 
@@ -341,13 +343,17 @@ class ArknightsActiveAccountSelect(component_base.ArknightsAccountSelect):
         """Select an Arknights account to mark as active."""
         assert isinstance(event.interaction, hikari.ComponentInteraction)
 
-        arknights_user = await self.get_selected_user(event.interaction)
+        username, server, game_uid = self.get_selection(event.interaction)
+        arknights_user = await auth.get_arknights_account_by_server_uid(server, game_uid)
         await auth.set_active_arknights_account(arknights_user)
 
         await event.interaction.create_initial_response(
             response_type=hikari.ResponseType.MESSAGE_UPDATE,
-            # TODO: Change this string in localisation file; probably provide username.
-            content=localisation.localise("auth_ak_set_active_success", event.interaction.locale),
+            content=localisation.localise(
+                "auth_ak_set_active_success",
+                event.interaction.locale,
+                format_map={"username": username, "server": server},
+            ),
             components=None,
         )
 
@@ -360,7 +366,8 @@ class ArknightsRemoveAccountSelect(component_base.ArknightsAccountSelect):
         """Select an Arknights account to unlink."""
         assert isinstance(event.interaction, hikari.ComponentInteraction)
 
-        arknights_user = await self.get_selected_user(event.interaction)
+        _, server, game_uid = self.get_selection(event.interaction)
+        arknights_user = await auth.get_arknights_account_by_server_uid(server, game_uid)
         duffelbag_user = await auth.get_user_by_platform(
             platform=auth.Platform.DISCORD,
             platform_id=event.interaction.user.id,
@@ -379,10 +386,6 @@ class ArknightsRemoveAccountSelect(component_base.ArknightsAccountSelect):
             ),
             components=None,
         )
-
-
-hooks = tanjun.AnyHooks()
-component.set_slash_hooks(hooks)
 
 
 @hooks.with_on_error
@@ -567,7 +570,7 @@ def schedule_user_deletion(
 
 
 @component.with_client_callback(tanjun.ClientCallbackNames.STARTING)
-async def schedule_user_deletions() -> None:
+async def schedule_user_deletions_at_startup() -> None:
     """Get scheduled user deletions and create tasks for them."""
     for scheduled_deletion in await auth.get_scheduled_user_deletions():
         async_utils.safe_task(_delayed_user_deletion(scheduled_deletion))
@@ -576,4 +579,5 @@ async def schedule_user_deletions() -> None:
         async_utils.safe_task(_delayed_arknights_user_deletion(scheduled_deletion))
 
 
+component.set_slash_hooks(hooks)
 loader = component.make_loader()

@@ -39,7 +39,7 @@ class ArknightsAccountSelect(ryoshu.ManagedTextSelectMenu, abc.ABC):
 
         return hikari.impl.SelectOptionBuilder(
             label=f"{display_name} [{account.server}]",
-            value=f"{account.server}{cls.sep}{account.game_uid}",
+            value=f"{display_name}{cls.sep}{account.server}{cls.sep}{account.game_uid}",
             is_default=account.active,
         )
 
@@ -99,13 +99,7 @@ class ArknightsAccountSelect(ryoshu.ManagedTextSelectMenu, abc.ABC):
         return await cls.from_arknights_accounts(arknights_accounts)
 
     @classmethod
-    async def get_selected_user(cls, inter: hikari.ComponentInteraction) -> database.ArknightsUser:
-        """Get the selected Arknights user from an interaction."""
-        assert inter.values  # min_values is 1 so cannot be none.
-
-        server, game_uid = inter.values[0].split(cls.sep)
-
-        return await auth.get_arknights_account_by_server_uid(
-            typing.cast(arkprts.ArknightsServer, server),
-            game_uid,
-        )
+    def get_selection(cls, interaction: hikari.ComponentInteraction) -> tuple[str, arkprts.ArknightsServer, str]:
+        """Get the name, server, and game uid from an interaction."""
+        name, server, game_uid = interaction.values[0].split(cls.sep)
+        return (name, typing.cast(arkprts.ArknightsServer, server), game_uid)

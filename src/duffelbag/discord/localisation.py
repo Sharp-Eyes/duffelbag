@@ -93,7 +93,11 @@ def localise(
     if isinstance(locale, hikari.Locale):
         locale = locale.value
 
-    format_map |= _COMMAND_MENTION_LOCALISATIONS[locale]
+    format_map |= (
+        _COMMAND_MENTION_LOCALISATIONS[locale]
+        if locale in _COMMAND_MENTION_LOCALISATIONS
+        else _COMMAND_MENTION_LOCALISATIONS[base_localisation.DEFAULT_LOCALE]
+    )
 
     _LOGGER.trace("Target locale: %r.", locale)
     _LOGGER.debug(

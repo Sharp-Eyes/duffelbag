@@ -8,7 +8,7 @@ import warnings
 
 import coloredlogs
 
-__all__: typing.Sequence[str] = (
+__all__: typing.Sequence[str] = (  # noqa: RUF022
     "CRITICAL",
     "ERROR",
     "WARNING",
@@ -41,7 +41,7 @@ _ExcInfoType = None | bool | _SysExcInfoType | BaseException
 
 
 class DuffelbagLogger(logging.Logger):
-    def trace(  # noqa: PLR0913
+    def trace(
         self,
         msg: str,
         *args: object,
@@ -94,6 +94,8 @@ def initialise(level: int = TRACE) -> None:
     coloredlogs.DEFAULT_LOG_FORMAT = format_string
 
     warnings.simplefilter("always", DeprecationWarning)
+    warnings.filterwarnings("ignore", r".*Use ContextOverride.*", DeprecationWarning)
+
     logging.captureWarnings(capture=True)
 
     coloredlogs.install(level=level, stream=sys.stdout)  # pyright: ignore[reportUnknownMemberType]

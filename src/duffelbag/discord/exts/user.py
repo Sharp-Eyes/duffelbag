@@ -4,12 +4,12 @@ import decimal
 import typing
 
 import hikari
-import rapidfuzz
 import ryoshu
 import tanjun
 
 import database
 from duffelbag import auth, user_data
+from duffelbag.discord import autocomplete
 
 component = tanjun.Component(name="user")
 manager = ryoshu.get_manager("duffelbag.user")
@@ -34,20 +34,69 @@ async def game_data_sync_characters(ctx: tanjun.abc.SlashContext) -> None:
     await ctx.edit_last_response("Successfully synced your character data!")
 
 
+async def _get_characters_with_skills() -> typing.Mapping[str, str]:
+    joined = database.StaticCharacter.id.join_on(database.StaticCharacterSkill.character_id)
+    characters = await (
+        database.StaticCharacter.select(database.StaticCharacter.name, joined.character_id)
+        .where(database.StaticCharacter.id == joined.character_id)
+    )
+    return {
+        character["name"]: character["id.character_id"]
+        for character in characters
+    }
+
+
+async def get_skill_character_options(
+    argument: str,
+    *,
+    min_results: int = 3,
+    max_results: int = 10,
+    score_cutoff: int = 80,
+    characters: typing.Mapping[str, str] = tanjun.cached_inject(_get_characters_with_skills),
+) -> typing.Mapping[str, str]:
+    return await autocomplete.find_best_choices(
+        argument,
+        objects=characters,
+        min_results=min_results,
+        max_results=max_results,
+        score_cutoff=score_cutoff,
+    )
+
+
 @tanjun.with_bool_slash_option(
     "hidden",
     "Whether you want other people to be able to see the result of this command.",
     default=True,
 )
 @tanjun.with_str_slash_option(
+    "skill_level",
+    "The level at which you want to check the skill.",
+    default="MAX",
+    key="skill_level_input",
+)
+@tanjun.with_str_slash_option(
+    "skill",
+    "The skill you want to check. If omitted, defaults to skill 1.",
+    default="S1",
+    key="skill_input",
+)
+@tanjun.with_str_slash_option(
     "character",
-    "The character for whom you wish to farm a mastery.",
-    key="character_id",
+    "The character whose skills you want to check.",
+    autocomplete=skill_character_autocomplete,
+    converters=skill_character_converter,
     min_length=1,  # W (1 char) ~ Skadi the Corrupting Heart (26 chars).
     max_length=32,
 )
 @game_data_group.as_sub_command("skill", "Add a skill mastery to your farming goals.")
-async def game_data_skill(ctx: tanjun.abc.SlashContext, character_id: str, *, hidden: bool = True) -> None:
+async def game_data_skill(
+    ctx: tanjun.abc.SlashContext,
+    character: database.StaticCharacter,
+    skill_input: str,
+    skill_level_input: str,
+    *,
+    hidden: bool = True,
+) -> None:
     """Add a skill mastery to your farming goals.
 
     Parameters
@@ -60,16 +109,6 @@ async def game_data_skill(ctx: tanjun.abc.SlashContext, character_id: str, *, hi
         Whether you want other people to be able to see the result of this command.
 
     """
-    character = await (
-        database.StaticCharacter.objects()
-        .where(database.StaticCharacter.id == character_id)
-        .first()
-    )
-
-    if character is None:
-        msg = f"Could not find a character for input: {character_id}"
-        raise LookupError(msg)  # TODO: Custom error for external handling
-
     init_skill = 0
     init_level = 1
 
@@ -321,74 +360,6 @@ class SkillLevelSelect(ryoshu.ManagedTextSelectMenu):
             components=await ryoshu.into_action_rows(rows),
             flags=hikari.MessageFlag.EPHEMERAL,
         )
-
-
-async def character_autocomplete_template(  # noqa: PLR0913
-    ctx: tanjun.abc.AutocompleteContext,
-    input_: str,
-    *,
-    characters: typing.Mapping[str, str],
-    min_results: int,
-    max_results: int,
-    score_cutoff: float,
-) -> None:
-    """Template function for character autocompleters.
-
-    Meant to be finalised using `functools.partial`, providing values for this
-    function's keyword-arguments.
-    """
-    if not input_:
-        # Truncate to first 25 options...
-        options = dict(pair for pair, _ in zip(characters.items(), range(25), strict=False))
-
-    else:
-        matches = rapidfuzz.process.extract(
-            input_,
-            characters.keys(),
-            processor=rapidfuzz.utils.default_process,
-            limit=max_results,
-        )
-
-        options: dict[str, str] = {}
-        for i, (match, score, _) in enumerate(matches):
-            # Only return results that match "well enough". If there aren't enough
-            # results, return at least a given minimum.
-            if i >= min_results and score < score_cutoff:
-                break
-
-            options[match] = characters[match]
-
-    await ctx.set_choices(options)
-
-
-async def _get_characters_with_skills() -> typing.Mapping[str, str]:
-    joined = database.StaticCharacter.id.join_on(database.StaticCharacterSkill.character_id)
-    characters = await (
-        database.StaticCharacter.select(database.StaticCharacter.name, joined.character_id)
-        .where(database.StaticCharacter.id == joined.character_id)
-    )
-    return {
-        character["name"]: character["id.character_id"]
-        for character in characters
-    }
-
-
-@game_data_skill.with_str_autocomplete("character")
-async def character_autocomplete(
-    ctx: tanjun.abc.AutocompleteContext,
-    input_: str,
-    *,
-    characters: typing.Mapping[str, str] = tanjun.cached_inject(_get_characters_with_skills),
-) -> None:
-    """Fuzzy-match over *all* arknights characters."""
-    await character_autocomplete_template(
-        ctx,
-        input_,
-        characters=characters,
-        min_results=3,
-        max_results=10,
-        score_cutoff=80,
-    )
 
 
 loader = component.make_loader()
